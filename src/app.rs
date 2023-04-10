@@ -1,7 +1,7 @@
 
 use std::{borrow::Cow, collections::HashMap};
 
-use eframe::egui::{self, DragValue, TextStyle};
+use eframe::{egui::{self, DragValue, TextStyle}, wgpu};
 use egui_node_graph::*;
 
 // ========= First, define your user data types =============
@@ -10,8 +10,8 @@ use egui_node_graph::*;
 /// store additional information that doesn't live in parameters. For this
 /// example, the node data stores the template (i.e. the "type") of the node.
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub struct MyNodeData {
-    template: MyNodeTemplate,
+pub struct ProtosNodeData {
+    template: ProtosNodeTemplate,
 }
 
 /// `DataType`s are what defines the possible range of connections when
@@ -20,18 +20,48 @@ pub struct MyNodeData {
 #[derive(PartialEq, Eq)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosDataType {
+    // gpu node
     Unknown,
     Texture,
     Image,
     RawBuffer,
-    ConstantBuffer
-    // Unknown 
-    // Texture (SRV)                                                    -> texture / sampler handle
-    // Image (sampled or not, depend on uav or srv node) (UAV / SRV)    -> texture handle
-    // RawBuffer (UAV / SRV)                                            -> buffer handle
-    // Index / Vertex buffer / Indirect ?                               -> buffer handle
-    // Constant buffer / uniforms (also contain struct data). (SRV)     -> buffer handle & class
+    ConstantBuffer,
+    // constant node
+    Scalar, // float
+    Vec2,   // float2
+    Vec3,   // float3
 }
+
+
+#[derive(Copy, Clone, Debug)]
+struct TextureHandle(u64); // wgpu::Texture
+
+#[derive(Copy, Clone, Debug)]
+struct ImageHandle(u64); // wgpu::Texture
+
+#[derive(Copy, Clone, Debug)]
+struct RawBufferHandle(u64); // wgpu::Buffer
+
+#[derive(Copy, Clone, Debug)]
+struct ConstantBufferHandle(u64); // wgpu::Buffer
+
+impl TextureHandle {
+    fn new() -> Self { Self { 0: 0 } }
+    fn invalid() -> Self { Self { 0: !0 } }
+}
+impl ImageHandle {
+    fn new() -> Self { Self { 0: 0 } }
+    fn invalid() -> Self { Self { 0: !0 } }
+}
+impl RawBufferHandle {
+    fn new() -> Self { Self { 0: 0 } }
+    fn invalid() -> Self { Self { 0: !0 } }
+}
+impl ConstantBufferHandle {
+    fn new() -> Self { Self { 0: 0 } }
+    fn invalid() -> Self { Self { 0: !0 } }
+}
+
 
 /// In the graph, input parameters can optionally have a constant value. This
 /// value can be directly edited in a widget inside the node itself.
@@ -43,23 +73,25 @@ pub enum ProtosDataType {
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosValueType {
-    Unknown { value: u8 },
-    Texture { value: Option<egui::TextureHandle> }, // TODO: should use custom handle to redirect to a table
-    Image { value: Option<egui::TextureHandle> },
+    Unknown {},
+    Texture { value: TextureHandle },
+    Image { value: ImageHandle },
+    RawBuffer { value: RawBufferHandle },
+    ConstantBuffer { value: ConstantBufferHandle },
 }
 
-impl Default for MyValueType {
+impl Default for ProtosValueType {
     fn default() -> Self {
         // NOTE: This is just a dummy `Default` implementation. The library
         // requires it to circumvent some internal borrow checker issues.
-        Self::Unknown { value: 0.0 }
+        Self::Unknown {}
     }
 }
 
-impl MyValueType {
+impl ProtosValueType {
     /// Tries to downcast this value type to a vector
-    pub fn try_to_vec2(self) -> anyhow::Result<egui::Vec2> {
-        if let MyValueType::Vec2 { value } = self {
+    pub fn try_to_texture(self) -> anyhow::Result<TextureHandle> {
+        if let ProtosValueType::Texture { value } = self {
             Ok(value)
         } else {
             anyhow::bail!("Invalid cast from {:?} to vec2", self)
@@ -67,8 +99,8 @@ impl MyValueType {
     }
 
     /// Tries to downcast this value type to a scalar
-    pub fn try_to_scalar(self) -> anyhow::Result<f32> {
-        if let MyValueType::Scalar { value } = self {
+    pub fn try_to_image(self) -> anyhow::Result<ImageHandle> {
+        if let ProtosValueType::Image { value } = self {
             Ok(value)
         } else {
             anyhow::bail!("Invalid cast from {:?} to scalar", self)
@@ -81,19 +113,13 @@ impl MyValueType {
 /// library how to convert a NodeTemplate into a Node.
 #[derive(Clone, Copy)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub enum MyNodeTemplate {
-    MakeVector,
-    MakeScalar,
-    AddScalar,
-    SubtractScalar,
-    VectorTimesScalar,
-    AddVector,
-    SubtractVector,
-
-    // GraphicPass, ComputePass
-    // Buffer
-    // Camera
-    // Mesh
+pub enum ProtosNodeTemplate {
+    GraphicPass, 
+    ComputePass,
+    Buffer,
+    Texture,
+    Camera,
+    Mesh,
 }
 
 /// The response type is used to encode side-effects produced when drawing a
@@ -101,7 +127,7 @@ pub enum MyNodeTemplate {
 /// nodes, handling connections...) are already handled by the library, but this
 /// mechanism allows creating additional side effects from user code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MyResponse {
+pub enum ProtosResponse {
     SetActiveNode(NodeId),
     ClearActiveNode,
 }
@@ -111,46 +137,57 @@ pub enum MyResponse {
 /// the user. For this example, we use it to keep track of the 'active' node.
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub struct MyGraphState {
+pub struct ProtosGraphState {
     pub active_node: Option<NodeId>,
 }
 
 // =========== Then, you need to implement some traits ============
 
 // A trait for the data types, to tell the library how to display them
-impl DataTypeTrait<MyGraphState> for ProtosDataType {
-    fn data_type_color(&self, _user_state: &mut MyGraphState) -> egui::Color32 {
+impl DataTypeTrait<ProtosGraphState> for ProtosDataType {
+    fn data_type_color(&self, _user_state: &mut ProtosGraphState) -> egui::Color32 {
         match self {
+            ProtosDataType::Unknown => egui::Color32::from_rgb(238, 207, 109),
             ProtosDataType::Texture => egui::Color32::from_rgb(38, 109, 211),
             ProtosDataType::Image => egui::Color32::from_rgb(238, 207, 109),
+            ProtosDataType::RawBuffer => egui::Color32::from_rgb(238, 207, 109),
+            ProtosDataType::ConstantBuffer => egui::Color32::from_rgb(238, 207, 109),
+            ProtosDataType::Scalar => egui::Color32::from_rgb(238, 207, 109),
+            ProtosDataType::Vec2 => egui::Color32::from_rgb(238, 207, 109),
+            ProtosDataType::Vec3 => egui::Color32::from_rgb(238, 207, 109),
         }
     }
 
     fn name(&self) -> Cow<'_, str> {
         match self {
+            ProtosDataType::Unknown => Cow::Borrowed("unknown"),
             ProtosDataType::Texture => Cow::Borrowed("texture"),
             ProtosDataType::Image => Cow::Borrowed("image"),
+            ProtosDataType::RawBuffer => Cow::Borrowed("rawbuffer"),
+            ProtosDataType::ConstantBuffer => Cow::Borrowed("constantbuffer"),
+            ProtosDataType::Scalar => Cow::Borrowed("scalar"),
+            ProtosDataType::Vec2 => Cow::Borrowed("vec2"),
+            ProtosDataType::Vec3 => Cow::Borrowed("vec3"),
         }
     }
 }
 
 // A trait for the node kinds, which tells the library how to build new nodes
 // from the templates in the node finder
-impl NodeTemplateTrait for MyNodeTemplate {
-    type NodeData = MyNodeData;
+impl NodeTemplateTrait for ProtosNodeTemplate {
+    type NodeData = ProtosNodeData;
     type DataType = ProtosDataType;
-    type ValueType = MyValueType;
-    type UserState = MyGraphState;
+    type ValueType = ProtosValueType;
+    type UserState = ProtosGraphState;
 
     fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
         Cow::Borrowed(match self {
-            MyNodeTemplate::MakeVector => "New vector",
-            MyNodeTemplate::MakeScalar => "New scalar",
-            MyNodeTemplate::AddScalar => "Scalar add",
-            MyNodeTemplate::SubtractScalar => "Scalar subtract",
-            MyNodeTemplate::AddVector => "Vector add",
-            MyNodeTemplate::SubtractVector => "Vector subtract",
-            MyNodeTemplate::VectorTimesScalar => "Vector times scalar",
+            ProtosNodeTemplate::GraphicPass => "New graphic pass",
+            ProtosNodeTemplate::ComputePass => "New compute pass",
+            ProtosNodeTemplate::Buffer => "New buffer",
+            ProtosNodeTemplate::Texture => "New texture",
+            ProtosNodeTemplate::Mesh => "New mesh",
+            ProtosNodeTemplate::Camera => "New Camera",
         })
     }
 
@@ -161,7 +198,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
     }
 
     fn user_data(&self, _user_state: &mut Self::UserState) -> Self::NodeData {
-        MyNodeData { template: *self }
+        ProtosNodeData { template: *self }
     }
 
     fn build_node(
@@ -175,139 +212,123 @@ impl NodeTemplateTrait for MyNodeTemplate {
 
         // We define some closures here to avoid boilerplate. Note that this is
         // entirely optional.
-        let input_scalar = |graph: &mut MyGraph, name: &str| {
+        let input_texture = |graph: &mut ProtosGraph, name: &str| {
             graph.add_input_param(
                 node_id,
                 name.to_string(),
-                ProtosDataType::Scalar,
-                MyValueType::Scalar { value: 0.0 },
-                InputParamKind::ConnectionOrConstant,
+                ProtosDataType::Texture,
+                ProtosValueType::Texture { value: TextureHandle::invalid() },
+                InputParamKind::ConnectionOnly,
                 true,
             );
         };
-        let input_vector = |graph: &mut MyGraph, name: &str| {
+        let input_image = |graph: &mut ProtosGraph, name: &str| {
             graph.add_input_param(
                 node_id,
                 name.to_string(),
-                ProtosDataType::Vec2,
-                MyValueType::Vec2 {
-                    value: egui::vec2(0.0, 0.0),
-                },
-                InputParamKind::ConnectionOrConstant,
+                ProtosDataType::Image,
+                ProtosValueType::Image { value: ImageHandle::invalid() },
+                InputParamKind::ConnectionOnly,
                 true,
             );
         };
 
-        let output_scalar = |graph: &mut MyGraph, name: &str| {
-            graph.add_output_param(node_id, name.to_string(), ProtosDataType::Scalar);
+        let output_texture = |graph: &mut ProtosGraph, name: &str| {
+            graph.add_output_param(node_id, name.to_string(), ProtosDataType::Texture);
         };
-        let output_vector = |graph: &mut MyGraph, name: &str| {
-            graph.add_output_param(node_id, name.to_string(), ProtosDataType::Vec2);
+        let output_image = |graph: &mut ProtosGraph, name: &str| {
+            graph.add_output_param(node_id, name.to_string(), ProtosDataType::Image);
         };
 
         match self {
-            MyNodeTemplate::AddScalar => {
-                // The first input param doesn't use the closure so we can comment
-                // it in more detail.
-                graph.add_input_param(
-                    node_id,
-                    // This is the name of the parameter. Can be later used to
-                    // retrieve the value. Parameter names should be unique.
-                    "A".into(),
-                    // The data type for this input. In this case, a scalar
-                    ProtosDataType::Scalar,
-                    // The value type for this input. We store zero as default
-                    MyValueType::Scalar { value: 0.0 },
-                    // The input parameter kind. This allows defining whether a
-                    // parameter accepts input connections and/or an inline
-                    // widget to set its value.
-                    InputParamKind::ConnectionOrConstant,
-                    true,
-                );
-                input_scalar(graph, "B");
-                output_scalar(graph, "out");
+            ProtosNodeTemplate::GraphicPass => {
+                // TODO for loop
+                input_texture(graph, "TextureSRV0".into());
+                // TODO for loop
+                output_image(graph, "RT0".into());
             }
-            MyNodeTemplate::SubtractScalar => {
-                input_scalar(graph, "A");
-                input_scalar(graph, "B");
-                output_scalar(graph, "out");
+            ProtosNodeTemplate::ComputePass => {
+                // TODO for loop
+                input_image(graph, "UAV0".into());
+                output_image(graph, "UAV0".into());
             }
-            MyNodeTemplate::VectorTimesScalar => {
-                input_scalar(graph, "scalar");
-                input_vector(graph, "vector");
-                output_vector(graph, "out");
+            ProtosNodeTemplate::Buffer => {
+                input_texture(graph, "scalar");
+                input_image(graph, "vector");
+                output_image(graph, "out");
             }
-            MyNodeTemplate::AddVector => {
-                input_vector(graph, "v1");
-                input_vector(graph, "v2");
-                output_vector(graph, "out");
+            ProtosNodeTemplate::Texture => {
+                input_image(graph, "v1");
+                input_image(graph, "v2");
+                output_image(graph, "out");
             }
-            MyNodeTemplate::SubtractVector => {
-                input_vector(graph, "v1");
-                input_vector(graph, "v2");
-                output_vector(graph, "out");
+            ProtosNodeTemplate::Camera => {
+                input_image(graph, "v1");
+                input_image(graph, "v2");
+                output_image(graph, "out");
             }
-            MyNodeTemplate::MakeVector => {
-                input_scalar(graph, "x");
-                input_scalar(graph, "y");
-                output_vector(graph, "out");
-            }
-            MyNodeTemplate::MakeScalar => {
-                input_scalar(graph, "value");
-                output_scalar(graph, "out");
+            ProtosNodeTemplate::Mesh => {
+                input_texture(graph, "x");
+                input_texture(graph, "y");
+                output_image(graph, "out");
             }
         }
     }
 }
 
-pub struct AllMyNodeTemplates;
-impl NodeTemplateIter for AllMyNodeTemplates {
-    type Item = MyNodeTemplate;
+pub struct AllProtosNodeTemplates;
+impl NodeTemplateIter for AllProtosNodeTemplates {
+    type Item = ProtosNodeTemplate;
 
     fn all_kinds(&self) -> Vec<Self::Item> {
         // This function must return a list of node kinds, which the node finder
         // will use to display it to the user. Crates like strum can reduce the
         // boilerplate in enumerating all variants of an enum.
         vec![
-            MyNodeTemplate::MakeScalar,
-            MyNodeTemplate::MakeVector,
-            MyNodeTemplate::AddScalar,
-            MyNodeTemplate::SubtractScalar,
-            MyNodeTemplate::AddVector,
-            MyNodeTemplate::SubtractVector,
-            MyNodeTemplate::VectorTimesScalar,
+            ProtosNodeTemplate::GraphicPass,
+            ProtosNodeTemplate::ComputePass,
+            ProtosNodeTemplate::Buffer,
+            ProtosNodeTemplate::Texture,
+            ProtosNodeTemplate::Camera,
+            ProtosNodeTemplate::Mesh,
         ]
     }
 }
 
-impl WidgetValueTrait for MyValueType {
-    type Response = MyResponse;
-    type UserState = MyGraphState;
-    type NodeData = MyNodeData;
+impl WidgetValueTrait for ProtosValueType {
+    type Response = ProtosResponse;
+    type UserState = ProtosGraphState;
+    type NodeData = ProtosNodeData;
     fn value_widget(
         &mut self,
         param_name: &str,
         _node_id: NodeId,
         ui: &mut egui::Ui,
-        _user_state: &mut MyGraphState,
-        _node_data: &MyNodeData,
-    ) -> Vec<MyResponse> {
+        _user_state: &mut ProtosGraphState,
+        _node_data: &ProtosNodeData,
+    ) -> Vec<ProtosResponse> {
         // This trait is used to tell the library which UI to display for the
         // inline parameter widgets.
         match self {
-            MyValueType::Vec2 { value } => {
+            ProtosValueType::Texture { value } => {
                 ui.label(param_name);
                 ui.horizontal(|ui| {
-                    ui.label("x");
-                    ui.add(DragValue::new(&mut value.x));
-                    ui.label("y");
-                    ui.add(DragValue::new(&mut value.y));
+                   // ui.label("x");
+                   // ui.add(DragValue::new(&mut value.x));
+                    //ui.label("y");
+                    //ui.add(DragValue::new(&mut value.y));
                 });
             }
-            MyValueType::Scalar { value } => {
+            ProtosValueType::Image { value } => {
+                // TODO retrieve value here 
                 ui.horizontal(|ui| {
-                    ui.label(param_name);
-                    ui.add(DragValue::new(value));
+                    //ui.label(param_name);
+                    //ui.add(DragValue::new(v));
+                });
+            }
+            _  => {
+                ui.horizontal(|ui| {
+                    //ui.label(param_name);
                 });
             }
         }
@@ -316,12 +337,12 @@ impl WidgetValueTrait for MyValueType {
     }
 }
 
-impl UserResponseTrait for MyResponse {}
-impl NodeDataTrait for MyNodeData {
-    type Response = MyResponse;
-    type UserState = MyGraphState;
+impl UserResponseTrait for ProtosResponse {}
+impl NodeDataTrait for ProtosNodeData {
+    type Response = ProtosResponse;
+    type UserState = ProtosGraphState;
     type DataType = ProtosDataType;
-    type ValueType = MyValueType;
+    type ValueType = ProtosValueType;
 
     // This method will be called when drawing each node. This allows adding
     // extra ui elements inside the nodes. In this case, we create an "active"
@@ -332,11 +353,11 @@ impl NodeDataTrait for MyNodeData {
         &self,
         ui: &mut egui::Ui,
         node_id: NodeId,
-        _graph: &Graph<MyNodeData, ProtosDataType, MyValueType>,
+        _graph: &Graph<ProtosNodeData, ProtosDataType, ProtosValueType>,
         user_state: &mut Self::UserState,
-    ) -> Vec<NodeResponse<MyResponse, MyNodeData>>
+    ) -> Vec<NodeResponse<ProtosResponse, ProtosNodeData>>
     where
-        MyResponse: UserResponseTrait,
+        ProtosResponse: UserResponseTrait,
     {
         // This logic is entirely up to the user. In this case, we check if the
         // current node we're drawing is the active one, by comparing against
@@ -355,14 +376,14 @@ impl NodeDataTrait for MyNodeData {
         // has been drawn. See below at the update method for an example.
         if !is_active {
             if ui.button("👁 Set active").clicked() {
-                responses.push(NodeResponse::User(MyResponse::SetActiveNode(node_id)));
+                responses.push(NodeResponse::User(ProtosResponse::SetActiveNode(node_id)));
             }
         } else {
             let button =
                 egui::Button::new(egui::RichText::new("👁 Active").color(egui::Color32::BLACK))
                     .fill(egui::Color32::GOLD);
             if ui.add(button).clicked() {
-                responses.push(NodeResponse::User(MyResponse::ClearActiveNode));
+                responses.push(NodeResponse::User(ProtosResponse::ClearActiveNode));
             }
         }
 
@@ -370,17 +391,16 @@ impl NodeDataTrait for MyNodeData {
     }
 }
 
-type MyGraph = Graph<MyNodeData, ProtosDataType, MyValueType>;
-type MyEditorState =
-    GraphEditorState<MyNodeData, ProtosDataType, MyValueType, MyNodeTemplate, MyGraphState>;
+type ProtosGraph = Graph<ProtosNodeData, ProtosDataType, ProtosValueType>;
+type ProtosEditorState = GraphEditorState<ProtosNodeData, ProtosDataType, ProtosValueType, ProtosNodeTemplate, ProtosGraphState>;
 
 #[derive(Default)]
 pub struct ProtosApp {
     // The `GraphEditorState` is the top-level object. You "register" all your
     // custom types by specifying it as its generic parameters.
-    state: MyEditorState,
+    state: ProtosEditorState,
 
-    user_state: MyGraphState,
+    user_state: ProtosGraphState,
     
     render_target : Option<egui::TextureHandle>,
 }
@@ -409,13 +429,13 @@ impl ProtosApp {
                 .unwrap_or_default();
             Self {
                 state,
-                user_state: MyGraphState::default(),
+                user_state: ProtosGraphState::default(),
                 render_target: texture,
             }
         }
         Self {
-            state: MyEditorState::default(),
-            user_state: MyGraphState::default(),
+            state: ProtosEditorState::default(),
+            user_state: ProtosGraphState::default(),
             render_target: texture,
         }
     }
@@ -462,17 +482,18 @@ impl eframe::App for ProtosApp {
         let graph_response = egui::CentralPanel::default()
             .show(ctx, |ui| {
                 self.state
-                    .draw_graph_editor(ui, AllMyNodeTemplates, &mut self.user_state)
+                    .draw_graph_editor(ui, AllProtosNodeTemplates, &mut self.user_state)
             })
             .inner;
+
         for node_response in graph_response.node_responses {
             // Here, we ignore all other graph events. But you may find
             // some use for them. For example, by playing a sound when a new
             // connection is created
             if let NodeResponse::User(user_event) = node_response {
                 match user_event {
-                    MyResponse::SetActiveNode(node) => self.user_state.active_node = Some(node),
-                    MyResponse::ClearActiveNode => self.user_state.active_node = None,
+                    ProtosResponse::SetActiveNode(node) => self.user_state.active_node = Some(node),
+                    ProtosResponse::ClearActiveNode => self.user_state.active_node = None,
                 }
             }
         }
@@ -494,36 +515,42 @@ impl eframe::App for ProtosApp {
                 self.user_state.active_node = None;
             }
         }
+        egui::Window::new("Window").show(ctx, |ui| {
+            ui.label("Windows can be moved by dragging them.");
+            ui.label("They are automatically sized based on contents.");
+            ui.label("You can turn on resizing and scrolling if you like.");
+            ui.label("You would normally choose either panels OR windows.");
+        });
     }
 }
 
-type OutputsCache = HashMap<OutputId, MyValueType>;
+type OutputsCache = HashMap<OutputId, ProtosValueType>;
 
 /// Recursively evaluates all dependencies of this node, then evaluates the node itself.
 pub fn evaluate_node(
-    graph: &MyGraph,
+    graph: &ProtosGraph,
     node_id: NodeId,
     outputs_cache: &mut OutputsCache,
-) -> anyhow::Result<MyValueType> {
+) -> anyhow::Result<ProtosValueType> {
     // To solve a similar problem as creating node types above, we define an
     // Evaluator as a convenience. It may be overkill for this small example,
     // but something like this makes the code much more readable when the
     // number of nodes starts growing.
 
     struct Evaluator<'a> {
-        graph: &'a MyGraph,
+        graph: &'a ProtosGraph,
         outputs_cache: &'a mut OutputsCache,
         node_id: NodeId,
     }
     impl<'a> Evaluator<'a> {
-        fn new(graph: &'a MyGraph, outputs_cache: &'a mut OutputsCache, node_id: NodeId) -> Self {
+        fn new(graph: &'a ProtosGraph, outputs_cache: &'a mut OutputsCache, node_id: NodeId) -> Self {
             Self {
                 graph,
                 outputs_cache,
                 node_id,
             }
         }
-        fn evaluate_input(&mut self, name: &str) -> anyhow::Result<MyValueType> {
+        fn evaluate_input(&mut self, name: &str) -> anyhow::Result<ProtosValueType> {
             // Calling `evaluate_input` recursively evaluates other nodes in the
             // graph until the input value for a paramater has been computed.
             evaluate_input(self.graph, self.node_id, name, self.outputs_cache)
@@ -531,8 +558,8 @@ pub fn evaluate_node(
         fn populate_output(
             &mut self,
             name: &str,
-            value: MyValueType,
-        ) -> anyhow::Result<MyValueType> {
+            value: ProtosValueType,
+        ) -> anyhow::Result<ProtosValueType> {
             // After computing an output, we don't just return it, but we also
             // populate the outputs cache with it. This ensures the evaluation
             // only ever computes an output once.
@@ -548,67 +575,64 @@ pub fn evaluate_node(
             // the graphs, you can come up with your own evaluation semantics!
             populate_output(self.graph, self.outputs_cache, self.node_id, name, value)
         }
-        fn input_vector(&mut self, name: &str) -> anyhow::Result<egui::Vec2> {
-            self.evaluate_input(name)?.try_to_vec2()
+        fn input_image(&mut self, name: &str) -> anyhow::Result<ImageHandle> {
+            self.evaluate_input(name)?.try_to_image()
         }
-        fn input_scalar(&mut self, name: &str) -> anyhow::Result<f32> {
-            self.evaluate_input(name)?.try_to_scalar()
+        fn input_texture(&mut self, name: &str) -> anyhow::Result<TextureHandle> {
+            self.evaluate_input(name)?.try_to_texture()
         }
-        fn output_vector(&mut self, name: &str, value: egui::Vec2) -> anyhow::Result<MyValueType> {
-            self.populate_output(name, MyValueType::Vec2 { value })
+        fn output_image(&mut self, name: &str, value: ImageHandle) -> anyhow::Result<ProtosValueType> {
+            self.populate_output(name, ProtosValueType::Image { value })
         }
-        fn output_scalar(&mut self, name: &str, value: f32) -> anyhow::Result<MyValueType> {
-            self.populate_output(name, MyValueType::Scalar { value })
+        fn output_texture(&mut self, name: &str, value: TextureHandle) -> anyhow::Result<ProtosValueType> {
+            self.populate_output(name, ProtosValueType::Texture { value })
         }
     }
 
     let node = &graph[node_id];
     let mut evaluator = Evaluator::new(graph, outputs_cache, node_id);
     match node.user_data.template {
-        MyNodeTemplate::AddScalar => {
-            let a = evaluator.input_scalar("A")?;
-            let b = evaluator.input_scalar("B")?;
-            evaluator.output_scalar("out", a + b)
+        ProtosNodeTemplate::GraphicPass => {
+            // TODO evaluate graphic pass here...
+            let a = evaluator.input_texture("A")?;
+            let b = evaluator.input_texture("B")?;
+            evaluator.output_texture("out", a)
         }
-        MyNodeTemplate::SubtractScalar => {
-            let a = evaluator.input_scalar("A")?;
-            let b = evaluator.input_scalar("B")?;
-            evaluator.output_scalar("out", a - b)
+        ProtosNodeTemplate::ComputePass => {
+            let a = evaluator.input_texture("A")?;
+            let b = evaluator.input_texture("B")?;
+            evaluator.output_texture("out", a)
         }
-        MyNodeTemplate::VectorTimesScalar => {
-            let scalar = evaluator.input_scalar("scalar")?;
-            let vector = evaluator.input_vector("vector")?;
-            evaluator.output_vector("out", vector * scalar)
+        ProtosNodeTemplate::Buffer => {
+            let scalar = evaluator.input_texture("scalar")?;
+            let vector = evaluator.input_image("vector")?;
+            evaluator.output_image("out", vector)
         }
-        MyNodeTemplate::AddVector => {
-            let v1 = evaluator.input_vector("v1")?;
-            let v2 = evaluator.input_vector("v2")?;
-            evaluator.output_vector("out", v1 + v2)
+        ProtosNodeTemplate::Texture => {
+            let v1 = evaluator.input_image("v1")?;
+            let v2 = evaluator.input_image("v2")?;
+            evaluator.output_image("out", v1)
         }
-        MyNodeTemplate::SubtractVector => {
-            let v1 = evaluator.input_vector("v1")?;
-            let v2 = evaluator.input_vector("v2")?;
-            evaluator.output_vector("out", v1 - v2)
+        ProtosNodeTemplate::Camera => {
+            let v1 = evaluator.input_image("v1")?;
+            let v2 = evaluator.input_image("v2")?;
+            evaluator.output_image("out", v1)
         }
-        MyNodeTemplate::MakeVector => {
-            let x = evaluator.input_scalar("x")?;
-            let y = evaluator.input_scalar("y")?;
-            evaluator.output_vector("out", egui::vec2(x, y))
-        }
-        MyNodeTemplate::MakeScalar => {
-            let value = evaluator.input_scalar("value")?;
-            evaluator.output_scalar("out", value)
+        ProtosNodeTemplate::Mesh => {
+            let x = evaluator.input_image("x")?;
+            let y = evaluator.input_texture("y")?;
+            evaluator.output_image("out", x)
         }
     }
 }
 
 fn populate_output(
-    graph: &MyGraph,
+    graph: &ProtosGraph,
     outputs_cache: &mut OutputsCache,
     node_id: NodeId,
     param_name: &str,
-    value: MyValueType,
-) -> anyhow::Result<MyValueType> {
+    value: ProtosValueType,
+) -> anyhow::Result<ProtosValueType> {
     let output_id = graph[node_id].get_output(param_name)?;
     outputs_cache.insert(output_id, value);
     Ok(value)
@@ -616,11 +640,11 @@ fn populate_output(
 
 // Evaluates the input value of
 fn evaluate_input(
-    graph: &MyGraph,
+    graph: &ProtosGraph,
     node_id: NodeId,
     param_name: &str,
     outputs_cache: &mut OutputsCache,
-) -> anyhow::Result<MyValueType> {
+) -> anyhow::Result<ProtosValueType> {
     let input_id = graph[node_id].get_input(param_name)?;
 
     // The output of another node is connected.
