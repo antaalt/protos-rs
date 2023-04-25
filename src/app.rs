@@ -1,8 +1,11 @@
 
 use std::{borrow::Cow, collections::HashMap};
 
-use eframe::{egui::{self, DragValue, TextStyle}, wgpu};
+use egui::{self, DragValue, TextStyle};
 use egui_node_graph::*;
+
+use crate::gfx::{self, RenderGraph};
+
 
 // ========= First, define your user data types =============
 
@@ -33,36 +36,6 @@ pub enum ProtosDataType {
 }
 
 
-#[derive(Copy, Clone, Debug)]
-struct TextureHandle(u64); // wgpu::Texture
-
-#[derive(Copy, Clone, Debug)]
-struct ImageHandle(u64); // wgpu::Texture
-
-#[derive(Copy, Clone, Debug)]
-struct RawBufferHandle(u64); // wgpu::Buffer
-
-#[derive(Copy, Clone, Debug)]
-struct ConstantBufferHandle(u64); // wgpu::Buffer
-
-impl TextureHandle {
-    fn new() -> Self { Self { 0: 0 } }
-    fn invalid() -> Self { Self { 0: !0 } }
-}
-impl ImageHandle {
-    fn new() -> Self { Self { 0: 0 } }
-    fn invalid() -> Self { Self { 0: !0 } }
-}
-impl RawBufferHandle {
-    fn new() -> Self { Self { 0: 0 } }
-    fn invalid() -> Self { Self { 0: !0 } }
-}
-impl ConstantBufferHandle {
-    fn new() -> Self { Self { 0: 0 } }
-    fn invalid() -> Self { Self { 0: !0 } }
-}
-
-
 /// In the graph, input parameters can optionally have a constant value. This
 /// value can be directly edited in a widget inside the node itself.
 ///
@@ -74,10 +47,13 @@ impl ConstantBufferHandle {
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosValueType {
     Unknown {},
-    Texture { value: TextureHandle },
-    Image { value: ImageHandle },
-    RawBuffer { value: RawBufferHandle },
-    ConstantBuffer { value: ConstantBufferHandle },
+    Texture { value: gfx::TextureHandle },
+    Image { value: gfx::ImageHandle },
+    RawBuffer { value: gfx::RawBufferHandle },
+    ConstantBuffer { value: gfx::ConstantBufferHandle },
+    Scalar { value: f32 },
+    Vec2 { value: [f32; 2] },
+    Vec3 { value: [f32; 3] },
 }
 
 impl Default for ProtosValueType {
@@ -90,7 +66,7 @@ impl Default for ProtosValueType {
 
 impl ProtosValueType {
     /// Tries to downcast this value type to a vector
-    pub fn try_to_texture(self) -> anyhow::Result<TextureHandle> {
+    pub fn try_to_texture(self) -> anyhow::Result<gfx::TextureHandle> {
         if let ProtosValueType::Texture { value } = self {
             Ok(value)
         } else {
@@ -99,7 +75,7 @@ impl ProtosValueType {
     }
 
     /// Tries to downcast this value type to a scalar
-    pub fn try_to_image(self) -> anyhow::Result<ImageHandle> {
+    pub fn try_to_image(self) -> anyhow::Result<gfx::ImageHandle> {
         if let ProtosValueType::Image { value } = self {
             Ok(value)
         } else {
@@ -138,7 +114,7 @@ pub enum ProtosResponse {
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProtosGraphState {
-    pub active_node: Option<NodeId>,
+    pub active_node: Option<NodeId>, // Should be swapchain node...
 }
 
 // =========== Then, you need to implement some traits ============
@@ -217,7 +193,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
                 node_id,
                 name.to_string(),
                 ProtosDataType::Texture,
-                ProtosValueType::Texture { value: TextureHandle::invalid() },
+                ProtosValueType::Texture { value: gfx::TextureHandle::invalid() },
                 InputParamKind::ConnectionOnly,
                 true,
             );
@@ -227,7 +203,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
                 node_id,
                 name.to_string(),
                 ProtosDataType::Image,
-                ProtosValueType::Image { value: ImageHandle::invalid() },
+                ProtosValueType::Image { value: gfx::ImageHandle::invalid() },
                 InputParamKind::ConnectionOnly,
                 true,
             );
@@ -243,7 +219,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
         match self {
             ProtosNodeTemplate::GraphicPass => {
                 // TODO for loop
-                input_texture(graph, "TextureSRV0".into());
+                input_texture(graph, "SRV0".into());
                 // TODO for loop
                 output_image(graph, "RT0".into());
             }
@@ -253,9 +229,27 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
                 output_image(graph, "UAV0".into());
             }
             ProtosNodeTemplate::Buffer => {
-                input_texture(graph, "scalar");
-                input_image(graph, "vector");
-                output_image(graph, "out");
+                graph.add_input_param(
+                    node_id,
+                    String::from("Size"),
+                    ProtosDataType::Scalar,
+                    ProtosValueType::Scalar { value: 0.0 },
+                    InputParamKind::ConnectionOrConstant,
+                    true,
+                );
+                graph.add_input_param(
+                    node_id,
+                    String::from("Format"),
+                    ProtosDataType::Scalar,
+                    ProtosValueType::Scalar { value: 0.0 },
+                    InputParamKind::ConnectionOrConstant,
+                    true,
+                );
+                graph.add_output_param(
+                    node_id, 
+                    String::from("Buffer"),
+                    ProtosDataType::RawBuffer
+                );
             }
             ProtosNodeTemplate::Texture => {
                 input_image(graph, "v1");
@@ -326,9 +320,44 @@ impl WidgetValueTrait for ProtosValueType {
                     //ui.add(DragValue::new(v));
                 });
             }
-            _  => {
+            ProtosValueType::RawBuffer { value } => {
+                // TODO retrieve value here 
                 ui.horizontal(|ui| {
                     //ui.label(param_name);
+                    //ui.add(DragValue::new(v));
+                });
+            }
+            ProtosValueType::ConstantBuffer { value } => {
+                // TODO retrieve value here 
+                ui.horizontal(|ui| {
+                    //ui.label(param_name);
+                    //ui.add(DragValue::new(v));
+                });
+            }
+            ProtosValueType::Scalar { value } => {
+                ui.horizontal(|ui| {
+                    ui.label(param_name);
+                    ui.add(DragValue::new(value));
+                });
+            }
+            ProtosValueType::Vec2 { value } => {
+                ui.horizontal(|ui| {
+                    ui.label(param_name);
+                    ui.add(DragValue::new(&mut value[0]));
+                    ui.add(DragValue::new(&mut value[1]));
+                });
+            }
+            ProtosValueType::Vec3 { value } => {
+                ui.horizontal(|ui| {
+                    ui.label(param_name);
+                    ui.add(DragValue::new(&mut value[0]));
+                    ui.add(DragValue::new(&mut value[1]));
+                    ui.add(DragValue::new(&mut value[2]));
+                });
+            }
+            _  => {
+                ui.horizontal(|ui| {
+                    ui.label("Unknown");
                 });
             }
         }
@@ -401,6 +430,8 @@ pub struct ProtosApp {
     state: ProtosEditorState,
 
     user_state: ProtosGraphState,
+
+    render_graph: gfx::RenderGraph,
     
     render_target : Option<egui::TextureHandle>,
 }
@@ -409,11 +440,11 @@ pub struct ProtosApp {
 const PERSISTENCE_KEY: &str = "protos_rs";
 
 impl ProtosApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &egui::Context) -> Self {
         let mut texture : Option<egui::TextureHandle> = None;
         texture.get_or_insert_with(|| {
             // Init the render target with a default size. It will be resized at runtime.
-            cc.egui_ctx.load_texture(
+            cc.load_texture(
                 "render-target",
                 egui::ColorImage::new([500, 500], egui::Color32::WHITE),
                 egui::TextureFilter::Linear
@@ -423,7 +454,7 @@ impl ProtosApp {
         /// Load previous app state (if any).
         #[cfg(feature = "persistence")]
         {
-            let state = cc
+            /*let state = cc
                 .storage
                 .and_then(|storage| eframe::get_value(storage, PERSISTENCE_KEY))
                 .unwrap_or_default();
@@ -431,18 +462,16 @@ impl ProtosApp {
                 state,
                 user_state: ProtosGraphState::default(),
                 render_target: texture,
-            }
+            }*/
         }
         Self {
             state: ProtosEditorState::default(),
             user_state: ProtosGraphState::default(),
+            render_graph: RenderGraph::default(),
             render_target: texture,
         }
     }
-}
-
-
-impl eframe::App for ProtosApp {
+    
     #[cfg(feature = "persistence")]
     /// If the persistence function is enabled,
     /// Called by the frame work to save state before shutdown.
@@ -451,7 +480,7 @@ impl eframe::App for ProtosApp {
     }
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    pub fn ui(&mut self, ctx: &egui::Context) {
         // Top menu
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -497,9 +526,10 @@ impl eframe::App for ProtosApp {
                 }
             }
         }
-
-        if let Some(node) = self.user_state.active_node {
+        // Here we must create all resources & cache it & create command buffers...
+        if let Some(node) = self.user_state.active_node { // TODO: this check should be "if graph changed"
             if self.state.graph.nodes.contains_key(node) {
+                create_node(&self.state.graph, &self.render_graph, node);
                 let text = match evaluate_node(&self.state.graph, node, &mut HashMap::new()) {
                     Ok(value) => format!("The result is: {:?}", value),
                     Err(err) => format!("Execution error: {}", err),
@@ -522,6 +552,22 @@ impl eframe::App for ProtosApp {
             ui.label("You would normally choose either panels OR windows.");
         });
     }
+}
+
+pub fn create_node(graph: &ProtosGraph, render_graph: &gfx::RenderGraph, node_id: NodeId)
+{
+    // Here we create the node depending on its type.
+    
+    let node = &graph[node_id];
+    match node.user_data.template {
+        ProtosNodeTemplate::GraphicPass => {
+            // TODO: retrieve all rasterizer desc 
+            // Create graphic pass
+            let graphic_pass = render_graph.create_graphic_pass();
+            //node.user_data;
+        }
+        _ => ()
+    };
 }
 
 type OutputsCache = HashMap<OutputId, ProtosValueType>;
@@ -575,28 +621,30 @@ pub fn evaluate_node(
             // the graphs, you can come up with your own evaluation semantics!
             populate_output(self.graph, self.outputs_cache, self.node_id, name, value)
         }
-        fn input_image(&mut self, name: &str) -> anyhow::Result<ImageHandle> {
+        fn input_image(&mut self, name: &str) -> anyhow::Result<gfx::ImageHandle> {
             self.evaluate_input(name)?.try_to_image()
         }
-        fn input_texture(&mut self, name: &str) -> anyhow::Result<TextureHandle> {
+        fn input_texture(&mut self, name: &str) -> anyhow::Result<gfx::TextureHandle> {
             self.evaluate_input(name)?.try_to_texture()
         }
-        fn output_image(&mut self, name: &str, value: ImageHandle) -> anyhow::Result<ProtosValueType> {
+        fn output_image(&mut self, name: &str, value: gfx::ImageHandle) -> anyhow::Result<ProtosValueType> {
             self.populate_output(name, ProtosValueType::Image { value })
         }
-        fn output_texture(&mut self, name: &str, value: TextureHandle) -> anyhow::Result<ProtosValueType> {
+        fn output_texture(&mut self, name: &str, value: gfx::TextureHandle) -> anyhow::Result<ProtosValueType> {
             self.populate_output(name, ProtosValueType::Texture { value })
+        }
+        fn output_graphic_pass(&mut self, name: &str, rt0: gfx::TextureHandle) -> anyhow::Result<ProtosValueType> {
+            self.populate_output(name, ProtosValueType::Texture { value: rt0 })
         }
     }
 
+    // This should not create data, it should simply be the command recorder
     let node = &graph[node_id];
     let mut evaluator = Evaluator::new(graph, outputs_cache, node_id);
     match node.user_data.template {
         ProtosNodeTemplate::GraphicPass => {
-            // TODO evaluate graphic pass here...
-            let a = evaluator.input_texture("A")?;
-            let b = evaluator.input_texture("B")?;
-            evaluator.output_texture("out", a)
+            let srv0 = evaluator.input_texture("SRV0");
+            evaluator.output_graphic_pass("out", srv0.expect("no srv0"))
         }
         ProtosNodeTemplate::ComputePass => {
             let a = evaluator.input_texture("A")?;
