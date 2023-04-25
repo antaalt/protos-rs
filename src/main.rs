@@ -36,7 +36,7 @@ fn main() {
         .with_decorations(true)
         .with_resizable(true)
         .with_transparent(false)
-        .with_title("egui-wgpu_winit example")
+        .with_title("Protos RS")
         .with_inner_size(winit::dpi::PhysicalSize {
             width: INITIAL_WIDTH,
             height: INITIAL_HEIGHT,
@@ -187,9 +187,14 @@ fn main() {
                         surface.configure(&device, &surface_config);
                     }
                 }
-                winit::event::WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                }
+                winit::event::WindowEvent::CloseRequested | winit::event::WindowEvent::KeyboardInput {
+                    input: winit::event::KeyboardInput {
+                        state: winit::event::ElementState::Pressed,
+                        virtual_keycode: Some(winit::event::VirtualKeyCode::Escape),
+                        ..
+                    },
+                    ..
+                } => control_flow.set_exit(),
                 _ => {}
             },
             _ => (),
