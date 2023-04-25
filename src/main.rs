@@ -10,8 +10,8 @@ use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use winit::event::Event::*;
 use winit::event_loop::ControlFlow;
-const INITIAL_WIDTH: u32 = 1920;
-const INITIAL_HEIGHT: u32 = 1080;
+const INITIAL_WIDTH: u32 = 1280;
+const INITIAL_HEIGHT: u32 = 720;
 
 /// A custom event type for the winit app.
 enum Event {
@@ -29,7 +29,7 @@ impl epi::backend::RepaintSignal for ExampleRepaintSignal {
 }
 
 /// A simple egui + wgpu + winit based example.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_arch = "wasm32"))] // TODO support wasm
 fn main() {
     let event_loop = winit::event_loop::EventLoopBuilder::<Event>::with_user_event().build();
     let window = winit::window::WindowBuilder::new()
@@ -90,7 +90,9 @@ fn main() {
 
     // Display the demo application that ships with egui.
     //let mut demo_app = egui_demo_lib::DemoWindows::default();
-    let mut protos_app = protos_rs::ProtosApp::new(&platform.context());
+
+    // Create Protos app
+    let mut protos_app = protos_rs::ProtosApp::new(&platform.context(), &device, &mut egui_rpass);
 
     let start_time = Instant::now();
     event_loop.run(move |event, _, control_flow| {
@@ -122,7 +124,7 @@ fn main() {
                 platform.begin_frame();
 
                 // Draw the demo application.
-                protos_app.ui(&platform.context());
+                protos_app.ui(&platform.context(), &device, &mut egui_rpass);
 
                 // End the UI frame. We could now handle the output and draw the UI with the backend.
                 let full_output = platform.end_frame(Some(&window));

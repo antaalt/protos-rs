@@ -423,6 +423,14 @@ impl NodeDataTrait for ProtosNodeData {
 type ProtosGraph = Graph<ProtosNodeData, ProtosDataType, ProtosValueType>;
 type ProtosEditorState = GraphEditorState<ProtosNodeData, ProtosDataType, ProtosValueType, ProtosNodeTemplate, ProtosGraphState>;
 
+struct ProtosRenderTarget {
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+
+    egui: egui::TextureId,
+    size: egui::Vec2,
+}
+
 #[derive(Default)]
 pub struct ProtosApp {
     // The `GraphEditorState` is the top-level object. You "register" all your
@@ -433,23 +441,51 @@ pub struct ProtosApp {
 
     render_graph: gfx::RenderGraph,
     
-    render_target : Option<egui::TextureHandle>,
+    render_target : Option<ProtosRenderTarget>,
 }
 
 #[cfg(feature = "persistence")]
 const PERSISTENCE_KEY: &str = "protos_rs";
 
 impl ProtosApp {
-    pub fn new(cc: &egui::Context) -> Self {
-        let mut texture : Option<egui::TextureHandle> = None;
-        texture.get_or_insert_with(|| {
-            // Init the render target with a default size. It will be resized at runtime.
-            cc.load_texture(
-                "render-target",
-                egui::ColorImage::new([500, 500], egui::Color32::WHITE),
-                egui::TextureFilter::Linear
-            )
-        });
+
+    fn create_render_target(width: u32, height: u32, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> ProtosRenderTarget
+    {
+        let label = Some("RenderTarget");
+        let size = wgpu::Extent3d {
+            width: 500,
+            height: 500,
+            depth_or_array_layers: 1,
+        };
+        let texture_format = wgpu::TextureFormat::Rgba8Unorm;
+        let texture_view_format = texture_format;
+        let texture = device.create_texture(
+            &wgpu::TextureDescriptor {
+                label,
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: texture_format,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                //view_formats: &[texture_view_format],
+            }
+        );
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let egui_texid = egui_rpass.egui_texture_from_wgpu_texture(&device, &view, wgpu::FilterMode::Linear); // TODO: add toggle for linear / nearest.
+
+        ProtosRenderTarget {
+            texture, 
+            view,
+            egui: egui_texid,
+            size: egui::Vec2::new(width as f32, height as f32),
+        }
+    }
+
+    pub fn new(cc: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> Self 
+    {
+        let texture = Self::create_render_target(500, 500, device, egui_rpass);
         /// If the persistence feature is enabled, Called once before the first frame.
         /// Load previous app state (if any).
         #[cfg(feature = "persistence")]
@@ -468,9 +504,10 @@ impl ProtosApp {
             state: ProtosEditorState::default(),
             user_state: ProtosGraphState::default(),
             render_graph: RenderGraph::default(),
-            render_target: texture,
+            render_target: Some(texture),
         }
     }
+
     
     #[cfg(feature = "persistence")]
     /// If the persistence function is enabled,
@@ -480,7 +517,7 @@ impl ProtosApp {
     }
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
-    pub fn ui(&mut self, ctx: &egui::Context) {
+    pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) {
         // Top menu
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -492,21 +529,15 @@ impl ProtosApp {
             .resizable(true)
             .default_width(ctx.used_size().x / 2.0)
             .show(ctx, |ui| {
-                let render_target_size = self.render_target.as_ref().unwrap().size();
+                let render_target_size = self.render_target.as_ref().unwrap().size;
                 let available_size = ui.available_size();
-                if available_size.x as usize != render_target_size[0] || available_size.y as usize != render_target_size[1]  {
-                    self.render_target.get_or_insert_with(|| {
-                        // Load the texture only once.
-                        ctx.load_texture(
-                            "render-target",
-                            egui::ColorImage::new([available_size.x as usize, available_size.y as usize], egui::Color32::WHITE),
-                            egui::TextureFilter::Linear
-                        )
-                    });
+                if available_size != render_target_size  {
+                    self.render_target = Some(Self::create_render_target(available_size.x as u32, available_size.y as u32, device, egui_rpass));
                 }
-                let render_target = self.render_target.as_ref().unwrap();
+                let render_target = self.render_target.as_ref().unwrap().egui;
                 ui.image(render_target, ui.available_size());
             });
+        
         // Node graph
         let graph_response = egui::CentralPanel::default()
             .show(ctx, |ui| {
@@ -529,7 +560,7 @@ impl ProtosApp {
         // Here we must create all resources & cache it & create command buffers...
         if let Some(node) = self.user_state.active_node { // TODO: this check should be "if graph changed"
             if self.state.graph.nodes.contains_key(node) {
-                create_node(&self.state.graph, &self.render_graph, node);
+                create_node(&self.state.graph, device, node);
                 let text = match evaluate_node(&self.state.graph, node, &mut HashMap::new()) {
                     Ok(value) => format!("The result is: {:?}", value),
                     Err(err) => format!("Execution error: {}", err),
@@ -554,7 +585,7 @@ impl ProtosApp {
     }
 }
 
-pub fn create_node(graph: &ProtosGraph, render_graph: &gfx::RenderGraph, node_id: NodeId)
+pub fn create_node(graph: &ProtosGraph, device: &wgpu::Device, node_id: NodeId)
 {
     // Here we create the node depending on its type.
     
@@ -563,7 +594,7 @@ pub fn create_node(graph: &ProtosGraph, render_graph: &gfx::RenderGraph, node_id
         ProtosNodeTemplate::GraphicPass => {
             // TODO: retrieve all rasterizer desc 
             // Create graphic pass
-            let graphic_pass = render_graph.create_graphic_pass();
+            //let graphic_pass = RenderGraph::create_graphic_pass(device);
             //node.user_data;
         }
         _ => ()
