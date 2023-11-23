@@ -93,7 +93,7 @@ impl Texture {
             }
         );
         
-        Ok(Texture { texture, view, sampler })
+        Ok(Self { texture, view, sampler })
     }
 
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float; // 1.
