@@ -239,8 +239,12 @@ impl GraphicPass {
         if self.data.is_some() {
             // TODO handle if there is change here.
         } else {
+            println!("YYOYOOYOOYO");
             self.data = Some(GraphicPassData::new(device, &self.desc))
         }
+    }
+    pub fn record_data(&self, device : &wgpu::Device) {
+        // TODO: record command list here
     }
 }
 impl GraphicPassData {
@@ -280,7 +284,8 @@ impl GraphicPassData {
                 module: &shader,
                 entry_point: "vs_main",
                 buffers: &[
-                    StaticVertex::desc()
+                    StaticVertex::desc(),
+                    //Instance::desc() // TODO: get this from rust-engine
                 ],
             },
             fragment: Some(wgpu::FragmentState {

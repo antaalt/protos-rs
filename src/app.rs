@@ -1,5 +1,5 @@
 
-use std::{borrow::Cow, collections::HashMap, sync::Arc, fmt::{self, Formatter}};
+use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}, fmt::{self, Formatter}};
 
 use egui::{self, DragValue, TextStyle};
 use egui_node_graph::*;
@@ -90,12 +90,12 @@ impl ProtosValueType {
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosNodeTemplate {
-    GraphicPass { desc: Arc<gfx::GraphicPass> }, 
-    ComputePass { desc: Arc<gfx::ComputePass> }, 
-    Buffer { desc: Arc<gfx::Buffer> }, 
-    Texture { desc: Arc<gfx::Texture> }, 
-    Camera { desc: Arc<gfx::Camera> }, 
-    Mesh { desc: Arc<gfx::Mesh> }, 
+    GraphicPass { desc: Arc<Mutex<gfx::GraphicPass>> }, 
+    ComputePass { desc: Arc<Mutex<gfx::ComputePass>> }, 
+    Buffer { desc: Arc<Mutex<gfx::Buffer>> }, 
+    Texture { desc: Arc<Mutex<gfx::Texture>> }, 
+    Camera { desc: Arc<Mutex<gfx::Camera>> }, 
+    Mesh { desc: Arc<Mutex<gfx::Mesh>> }, 
 }
 
 impl ProtosNodeTemplate {
@@ -533,10 +533,15 @@ impl ProtosApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) {
-        // Top menu
+        let mut compile = false;
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 egui::widgets::global_dark_light_mode_switch(ui);
+                ui.menu_button("Project", |ui| {
+                    if ui.button("Compile").clicked() {
+                        compile = true;
+                    }
+                });
             });
         });
         // Render zone
@@ -562,7 +567,7 @@ impl ProtosApp {
             .inner;
 
         // This might not be necessary for protos...
-        for node_response in graph_response.node_responses {
+        /*for node_response in graph_response.node_responses {
             // Here, we ignore all other graph events. But you may find
             // some use for them. For example, by playing a sound when a new
             // connection is created
@@ -572,30 +577,33 @@ impl ProtosApp {
                     ProtosResponse::ClearActiveNode => self.user_state.active_node = None,
                 }
             }
-        }
+        }*/
         // Here we must create all resources & cache it & create command buffers...
-        if let Some(node) = self.user_state.active_node { // TODO: this check should be "if graph changed"
-            if self.state.graph.nodes.contains_key(node) {
+        // Should have a RUN button.
+        if compile {//let Some(node) = self.user_state.active_node { // TODO: this check should be "if graph changed"
+            //if self.state.graph.nodes.contains_key(node) {
                 // First, we create all data if required.
-                create_node(&self, device, node);
-                // Second, record the command buffer by evaluating all nodes.
-                let text = match evaluate_node(&self.state.graph, node, &mut HashMap::new()) {
-                    Ok(value) => {
-                        format!("The result is: {:?}", value)
-                    },
-                    Err(err) => format!("Execution error: {}", err),
-                };
-                // TODO: rem : Dont need this for protos.
-                ctx.debug_painter().text(
-                    egui::pos2(10.0, 35.0),
-                    egui::Align2::LEFT_TOP,
-                    text,
-                    TextStyle::Button.resolve(&ctx.style()),
-                    egui::Color32::WHITE,
-                );
-            } else {
+                for node in & self.state.graph.nodes {
+                    create_node(&self, device, node.0);
+                    // Second, record the command buffer by evaluating all nodes.
+                    let _text = match evaluate_node(&self.state.graph, node.0, &mut HashMap::new()) {
+                        Ok(value) => {
+                            format!("The result is: {:?}", value)
+                        },
+                        Err(err) => format!("Execution error: {}", err),
+                    };
+                    // TODO: rem : Dont need this for protos.
+                    /*ctx.debug_painter().text(
+                        egui::pos2(10.0, 35.0),
+                        egui::Align2::LEFT_TOP,
+                        text,
+                        TextStyle::Button.resolve(&ctx.style()),
+                        egui::Color32::WHITE,
+                    );*/
+                }
+            /*} else {
                 self.user_state.active_node = None;
-            }
+            }*/
         }
         // TODO: some control window for ui
         egui::Window::new("Window").show(ctx, |ui| {
@@ -614,7 +622,7 @@ pub fn create_node(app: &ProtosApp, device: &wgpu::Device, node_id: NodeId) {
     match &node.user_data.template {
         ProtosNodeTemplate::GraphicPass{ desc } => {
             // TODO should use Rc instead maybe ? or Arc<Mutex<>> for thread safety cuz arc does not allow mutability
-            //desc.create_data(&device);
+            desc.lock().unwrap().create_data(&device);
         }
         _ => ()
     };
