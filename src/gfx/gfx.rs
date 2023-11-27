@@ -132,6 +132,20 @@ impl Default for Buffer {
         }
     }
 }
+impl BufferData {
+    fn new(device: &wgpu::Device, desc: &BufferDescription) -> Self {
+
+    }
+}
+impl Buffer {
+    pub fn update_data(&mut self, device: &wgpu::Device) {
+        if self.data.is_some() {
+            self.data = Some(BufferData::new(device, &self.desc));
+        } else {
+            self.data = Some(BufferData::new(device, &self.desc));
+        }
+    }
+}
 
 // --------------------------- TEXTURE -------------------------------
 #[derive(Debug)]
@@ -252,16 +266,16 @@ impl GraphicPass {
     pub fn has_data(&self) -> bool {
         self.data.is_some()
     }
-    pub fn create_data(&mut self, device : &wgpu::Device) {
+    pub fn update_data(&mut self, device : &wgpu::Device) {
         if self.data.is_some() {
-            // TODO handle if there is change here. Should update instead ? Yes, should update.
+            // TODO: check if this is enough & resources are correctly cleared...
+            self.data = Some(GraphicPassData::new(device, &self.desc))
         } else {
-            println!("YYOYOOYOOYO");
             self.data = Some(GraphicPassData::new(device, &self.desc))
         }
     }
     pub fn record_data(&self, device : &wgpu::Device) {
-        // TODO: record command list here
+        // TODO: record command list here ?
     }
     pub fn set_shader_resource_view(&mut self, index: u32, srv : ResourceHandle<Texture>) {
         // TODO store it somewhere in desc as handle.
@@ -269,7 +283,7 @@ impl GraphicPass {
     pub fn clear_shader_resource_view(&mut self, index: u32) {
 
     }
-    pub fn set_render_target(&mut self, index: u32) {
+    pub fn set_render_target(&mut self, index: u32, rt : ResourceHandle<Texture>) {
         
     }
     pub fn clear_render_target(&mut self, index: u32) {
