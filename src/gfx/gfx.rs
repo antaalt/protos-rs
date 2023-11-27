@@ -1,8 +1,8 @@
-use std::{default, collections::{HashMap, btree_map::Range}};
+use std::{default, collections::{HashMap, btree_map::Range}, sync::{Arc, Mutex}};
 
 
 // --------------------------- HANDLES -------------------------------
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
+/*#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TextureHandle(u64); // wgpu::Texture
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
@@ -35,7 +35,9 @@ impl RawBufferHandle {
 impl ConstantBufferHandle {
     pub fn new() -> Self { Self { 0: 0 } }
     pub fn invalid() -> Self { Self { 0: !0 } }
-}
+}*/
+
+type ResourceHandle<Type> = Arc<Mutex<Type>>;
 
 // --------------------------- PIPELINE -------------------------------
 pub enum VertexFactory {
@@ -214,8 +216,10 @@ impl Default for Mesh {
 
 // --------------------------- GRAPHIC PASS -------------------------------
 pub struct GraphicPassDescription {
-    pub bind_group : Vec<Vec<wgpu::BindGroupLayoutEntry>>,
-    //pub vertex_buffer_layout : Vec<wgpu::VertexBufferLayout>,
+    bind_group : Vec<Vec<wgpu::BindGroupLayoutEntry>>,
+    render_target: Vec<ResourceHandle<Texture>>,
+    shader_resource_view: Vec<ResourceHandle<Texture>>,
+    //vertex_buffer_layout : Vec<wgpu::VertexBufferLayout>,
 }
 pub struct GraphicPassData {
     render_pipeline: wgpu::RenderPipeline,
@@ -228,7 +232,20 @@ pub struct GraphicPass {
 
 impl Default for GraphicPassDescription {
     fn default() -> Self {
-        Self { bind_group: Vec::new() }
+        Self { 
+            bind_group: Vec::new(),
+            render_target: Vec::new(),
+            shader_resource_view: Vec::new(),
+        }
+    }
+}
+impl GraphicPassDescription {
+    pub fn new() -> Self {
+        Self { 
+            bind_group: Vec::new(),
+            render_target: Vec::new(),
+            shader_resource_view: Vec::new(),
+        }
     }
 }
 impl GraphicPass {
@@ -237,7 +254,7 @@ impl GraphicPass {
     }
     pub fn create_data(&mut self, device : &wgpu::Device) {
         if self.data.is_some() {
-            // TODO handle if there is change here.
+            // TODO handle if there is change here. Should update instead ? Yes, should update.
         } else {
             println!("YYOYOOYOOYO");
             self.data = Some(GraphicPassData::new(device, &self.desc))
@@ -245,6 +262,21 @@ impl GraphicPass {
     }
     pub fn record_data(&self, device : &wgpu::Device) {
         // TODO: record command list here
+    }
+    pub fn set_shader_resource_view(&mut self, index: u32, srv : ResourceHandle<Texture>) {
+        // TODO store it somewhere in desc as handle.
+    }
+    pub fn clear_shader_resource_view(&mut self, index: u32) {
+
+    }
+    pub fn set_render_target(&mut self, index: u32) {
+        
+    }
+    pub fn clear_render_target(&mut self, index: u32) {
+        
+    }
+    pub fn get_render_target(&self, index: u32) -> Option<ResourceHandle<Texture>> {
+        None
     }
 }
 impl GraphicPassData {
