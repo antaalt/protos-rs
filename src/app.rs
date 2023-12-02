@@ -507,8 +507,8 @@ impl ProtosApp {
         });
         // Render zone
         egui::SidePanel::right("RenderPanel")
-            .resizable(true)
             .default_width(ctx.used_size().x / 2.0)
+            .resizable(true)
             .show(ctx, |ui| {
                 self.user_state.available_size = ui.available_size();
                 if self.user_state.backbuffer_node.is_some() {
@@ -536,7 +536,7 @@ impl ProtosApp {
                                     ui.image(self.user_state.egui_texture_id, ui.available_size());
                                 },
                                 Err(e) => {
-                                    ui.label("View is loading.");
+                                    ui.add_sized(ui.available_size(), egui::Label::new("View is loading."));
                                 }
                             }
                         }
@@ -544,7 +544,7 @@ impl ProtosApp {
                     }
                     
                 } else {
-                    ui.label("No backbuffer active.");
+                    ui.add_sized(ui.available_size(), egui::Label::new("No backbuffer active."));
                 }
             });
         
