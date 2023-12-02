@@ -31,6 +31,13 @@ impl epi::backend::RepaintSignal for ExampleRepaintSignal {
 /// A simple egui + wgpu + winit based example.
 #[cfg(not(target_arch = "wasm32"))] // TODO support wasm
 fn main() {
+    std::panic::set_hook(Box::new(|panic_info| {
+        let backtrace = backtrace::Backtrace::new();
+        //  Do something with backtrace and panic_info.
+        println!("{:?}", backtrace);
+    }));
+
+
     let event_loop = winit::event_loop::EventLoopBuilder::<Event>::with_user_event().build();
     let window = winit::window::WindowBuilder::new()
         .with_decorations(true)
