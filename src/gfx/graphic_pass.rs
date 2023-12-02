@@ -1,3 +1,9 @@
+use std::default;
+use std::sync::Arc;
+use std::sync::Mutex;
+
+use wgpu::RenderPassDescriptor;
+
 use super::core::*;
 use super::texture::*;
 
@@ -65,16 +71,38 @@ impl Vertex for StaticVertex {
     }
 }
 
+#[derive(Clone)]
+pub struct AttachmentDescription {
+    width: u32,
+    height: u32,
+}
+
+impl Default for AttachmentDescription {
+    fn default() -> Self {
+        Self { 
+            width: 0,
+            height: 0,
+        }
+    }
+}
+
+impl AttachmentDescription {
+    pub fn set_size(&mut self, width: u32, height: u32)  {
+        self.width = width;
+        self.height = height;
+    }
+}
 
 pub struct GraphicPassDescription {
     bind_group : Vec<Vec<wgpu::BindGroupLayoutEntry>>,
-    render_target: Vec<Option<ResourceHandle<Texture>>>,
+    render_target_desc: Vec<AttachmentDescription>,
     shader_resource_view: Vec<Option<ResourceHandle<Texture>>>,
     //vertex_buffer_layout : Vec<wgpu::VertexBufferLayout>,
 }
 pub struct GraphicPassData {
     render_pipeline: wgpu::RenderPipeline,
-    bind_group_layout : Vec<wgpu::BindGroupLayout>
+    bind_group_layout : Vec<wgpu::BindGroupLayout>,
+    render_target: Vec<ResourceHandle<Texture>>,
 }
 pub struct GraphicPass {
     desc: GraphicPassDescription,
@@ -85,16 +113,7 @@ impl Default for GraphicPassDescription {
     fn default() -> Self {
         Self { 
             bind_group: Vec::new(),
-            render_target: Vec::new(),
-            shader_resource_view: Vec::new(),
-        }
-    }
-}
-impl GraphicPassDescription {
-    pub fn new() -> Self {
-        Self { 
-            bind_group: Vec::new(),
-            render_target: Vec::new(),
+            render_target_desc: Vec::new(),
             shader_resource_view: Vec::new(),
         }
     }
@@ -123,8 +142,42 @@ impl GraphicPass {
             self.data = Some(GraphicPassData::new(device, &self.desc))
         }
     }
-    pub fn record_data(&self, device : &wgpu::Device) {
-        // TODO: record command list here ?
+    pub fn record_data(&self, device : &wgpu::Device, cmd: &wgpu::CommandEncoder) {
+        if self.data.is_some() {
+            let data = self.data.as_ref().unwrap();
+            /*data.render_target
+            let render_pass = cmd.begin_render_pass(&RenderPassDescriptor{
+                label: Some("render_pass_random"),
+                color_attachments:&[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment:None/*Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                }),*/
+            });*/
+            // This should depend on mesh informations mostly...
+            // Should have an input Geometry (or mesh...). for all graphic pass.
+            // Could be simple quad or more complex shape.
+            //render_pass.set_pipeline(&self.data.unwrap().render_pipeline);
+            // Bind group are coming from geometry... or srv view...
+            /*render_pass.set_bind_group(0, &self.data.unwrap().bind_group_layout);
+            render_pass.draw(vertices, instances);*/
+        }
     }
     pub fn set_shader_resource_view(&mut self, index: u32, srv : Option<ResourceHandle<Texture>>) {
         // TODO: resize should be done by desc data ? or data is built by shader resource view that are set ? 
@@ -153,20 +206,17 @@ impl GraphicPass {
     pub fn clear_shader_resource_view(&mut self, index: u32) {
         self.set_shader_resource_view(index, None);
     }
-    pub fn set_render_target(&mut self, index: u32, rt : ResourceHandle<Texture>) {
-        self.register_render_target(index);
-        self.desc.render_target[index as usize] = Some(rt);
-    }
-    pub fn clear_render_target(&mut self, index: u32) {
-        self.register_render_target(index);
-        self.desc.render_target[index as usize] = None;
+    pub fn set_render_target(&mut self, index: u32, rt : &AttachmentDescription) {
+        if index as usize >= self.desc.render_target_desc.len() {
+            self.desc.render_target_desc.resize(index as usize + 1, AttachmentDescription::default());
+        }
+        self.desc.render_target_desc[index as usize] = rt.clone();
     }
     pub fn get_render_target(&self, index: u32) -> Option<ResourceHandle<Texture>> {
-        self.desc.render_target[index as usize].clone()
-    }
-    fn register_render_target(&mut self, index: u32) {
-        if index as usize >= self.desc.render_target.len() {
-            self.desc.render_target.resize(index as usize + 1, None);
+        if self.data.is_some() {
+            Some(self.data.as_ref().unwrap().render_target[index as usize].clone())
+        } else {
+            None
         }
     }
 }
@@ -185,14 +235,19 @@ impl GraphicPassData {
             bind_group_layout_ref.push(bind_group);
         }
 
+
         // Create attachments
-        let mut render_targets : Vec<Option<wgpu::ColorTargetState>> = vec![];
-        for (i, render_target) in description.render_target.iter().enumerate() {
-            render_targets.push(Some(wgpu::ColorTargetState {
+        let mut render_targets = Vec::new();
+        let mut render_targets_state = Vec::new();
+        for (i, render_target) in description.render_target_desc.iter().enumerate() {
+            render_targets_state.push(Some(wgpu::ColorTargetState {
                 format: wgpu::TextureFormat::Rgba8Unorm,
                 blend: Some(wgpu::BlendState::REPLACE),
                 write_mask: wgpu::ColorWrites::ALL
             }));
+            let mut attachment = Texture::default();
+            attachment.set_size(render_target.width, render_target.height);
+            render_targets.push(Arc::new(Mutex::new(attachment)));
         }
 
         // Create shaders
@@ -221,7 +276,7 @@ impl GraphicPassData {
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
-                targets: render_targets.as_ref(),
+                targets: render_targets_state.as_ref(),
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -252,6 +307,7 @@ impl GraphicPassData {
 
         GraphicPassData { 
             render_pipeline: render_pipeline, 
+            render_target: render_targets,
             bind_group_layout: bind_group_layout 
         }
     }

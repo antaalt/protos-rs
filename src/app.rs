@@ -632,35 +632,24 @@ pub fn evaluate_node(
                     pass.clear_shader_resource_view(i);
                 }
             }
-            // If we pass UAV, they are outputs aswell...
-            // Can pass a rt as input in order to render it.
-            // TODO: find issue with render target : if we pass swapchain, need to be get.
-            /*for i in 0..1 {
-                let rt = evaluate_input(device, graph, node_id, "RT0", outputs_cache);
-                if rt.is_ok() {
-                    let r = rt.unwrap();
-                    // Check input is valid type.
-                    if let ProtosValueType::Texture { value } = r {
-                        // Check its data is filled.
-                        if value.is_some() {
-                            pass.set_render_target(i, value.unwrap());
-                        } else {
-                            pass.clear_render_target(i);
-                        }
-                    } else {
-                        pass.clear_render_target(i);
-                    }
-                } else {
-                    pass.clear_render_target(i);
-                }
-            }*/
-            
-            // Output graphic pass will populate output. need to ensure data is created already.
-            populate_output(graph, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(0) }, outputs_cache);
+            let num_attachment = 1;
+            for i in 0..num_attachment {
+                // Should gather these informations from a evaluate_output. -> reach output node, read its data & select informations.
+                let mut desc = gfx::AttachmentDescription::default();
+                desc.set_size(500, 500);
+                pass.set_render_target(0, &desc);
+            }
             
             // Will call create if not created already.
             pass.update_data(device);
             println!("Graphic pass created.");
+            
+            for i in 0..num_attachment {
+                // Output graphic pass will populate output. need to ensure data is created already.
+                // TODO: custom name per output. (MRT support)
+                populate_output(graph, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(i) }, outputs_cache);
+            }
+            
         }
         ProtosNodeTemplate::ComputePass{ handle: _ } => {
             let a = evaluate_input(device, graph, node_id, "A", outputs_cache);

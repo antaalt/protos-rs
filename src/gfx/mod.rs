@@ -20,6 +20,7 @@ pub use self::mesh::Mesh;
 
 pub use self::backbuffer::BackbufferPassDescription;
 pub use self::graphic_pass::GraphicPassDescription;
+pub use self::graphic_pass::AttachmentDescription;
 pub use self::compute_pass::ComputePassDescription;
 pub use self::buffer::BufferDescription;
 pub use self::texture::TextureDescription;
