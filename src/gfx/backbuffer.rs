@@ -32,7 +32,6 @@ impl BackbufferPass {
         self.desc.width = width;
         self.desc.height = height;
     }
-
     pub fn get_view_handle(&self) -> anyhow::Result<&wgpu::TextureView> {
         if self.data.is_some() {
             let d = self.data.as_ref().unwrap();
@@ -45,6 +44,9 @@ impl BackbufferPass {
         } else {
             Err(anyhow!("No data"))
         }
+    }
+    pub fn has_data(&self) -> bool {
+        return self.data.is_some();
     }
 
     pub fn update_data(&mut self, device: &wgpu::Device) {

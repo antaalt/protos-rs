@@ -3,9 +3,9 @@ struct CameraUniform {
     view_pos: vec4<f32>,
     view_proj: mat4x4<f32>,
 };
-@group(1) @binding(0) var<uniform> camera: CameraUniform;
+//@group(1) @binding(0) var<uniform> camera: CameraUniform;
 
-struct InstanceInput {
+/*struct InstanceInput {
     @location(6) model_matrix_0: vec4<f32>,
     @location(7) model_matrix_1: vec4<f32>,
     @location(8) model_matrix_2: vec4<f32>,
@@ -13,7 +13,7 @@ struct InstanceInput {
     @location(10) normal_matrix_0: vec3<f32>,
     @location(11) normal_matrix_1: vec3<f32>,
     @location(12) normal_matrix_2: vec3<f32>,
-};
+};*/
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -37,10 +37,10 @@ struct VertexOutput {
 @vertex
 fn vs_main(
     model: VertexInput,
-    instance: InstanceInput,
+    //instance: InstanceInput,
     @builtin(vertex_index) in_vertex_index: u32,
 ) -> VertexOutput {
-    let normal_matrix = mat3x3<f32>(
+    /*let normal_matrix = mat3x3<f32>(
         instance.normal_matrix_0,
         instance.normal_matrix_1,
         instance.normal_matrix_2,
@@ -50,12 +50,18 @@ fn vs_main(
         instance.model_matrix_1,
         instance.model_matrix_2,
         instance.model_matrix_3,
+    );*/
+    let model_matrix = mat4x4<f32>(
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
     );
-
+    let normal_matrix = mat3x3<f32>(model_matrix[0].xyz, model_matrix[1].xyz, model_matrix[2].xyz);
     var out: VertexOutput;
     var world_pos : vec4<f32> = model_matrix * vec4<f32>(model.position, 1.0); 
     out.world_pos = world_pos.xyz;
-    out.clip_position = camera.view_proj * world_pos;
+    out.clip_position = /*camera.view_proj **/ world_pos;
     out.color = model.color;
     out.tex_coords = model.tex_coords;
     // TODO compute all this in tangent space to perform computation in tangent space.
@@ -67,18 +73,18 @@ fn vs_main(
 }
 
 // Fragment shader
-@group(0) @binding(0)
+/*@group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
 var s_diffuse: sampler;
 @group(0) @binding(2)
 var t_normal: texture_2d<f32>;
 @group(0) @binding(3)
-var s_normal: sampler;
+var s_normal: sampler;*/
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let albedo = textureSample(t_diffuse, s_diffuse, in.tex_coords) * in.color;
+    /*let albedo = textureSample(t_diffuse, s_diffuse, in.tex_coords) * in.color;
     let tangent_normal_map = textureSample(t_normal, s_normal, in.tex_coords).rgb * 2.0 - 1.0;
     
     // This generate normal matrix if no tangent / bitangent
@@ -113,5 +119,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let cos_theta = max(0.0, dot(world_normal, light_dir));
     let color = (cos_theta * light_color + gi_color) * albedo.xyz;
 
-    return vec4<f32>(color, albedo.a);
+    return vec4<f32>(color, albedo.a);*/
+    return vec4<f32>(0.0, 1.0, 0.0, 1.0);
 }

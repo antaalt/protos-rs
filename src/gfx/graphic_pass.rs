@@ -142,14 +142,17 @@ impl GraphicPass {
             self.data = Some(GraphicPassData::new(device, &self.desc))
         }
     }
-    pub fn record_data(&self, device : &wgpu::Device, cmd: &wgpu::CommandEncoder) {
+    pub fn record_data(&self, device : &wgpu::Device, cmd: &mut wgpu::CommandEncoder) {
         if self.data.is_some() {
             let data = self.data.as_ref().unwrap();
-            /*data.render_target
-            let render_pass = cmd.begin_render_pass(&RenderPassDescriptor{
-                label: Some("render_pass_random"),
-                color_attachments:&[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+
+            let mut render_targets = Vec::new();
+            //for rt in &data.render_target {
+                let locked = data.render_target[0].lock().unwrap();
+                //let locked = rt.lock().unwrap();
+                let value = locked.get_view_handle().unwrap();
+                render_targets.push(Some(wgpu::RenderPassColorAttachment {
+                    view: value,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -159,8 +162,13 @@ impl GraphicPass {
                             a: 1.0,
                         }),
                         store: true,
-                    },
-                })],
+                    }
+                }));
+            //}
+            
+            let render_pass = cmd.begin_render_pass(&RenderPassDescriptor{
+                label: Some("render_pass_random"),
+                color_attachments: &render_targets.as_ref(),
                 depth_stencil_attachment:None/*Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_texture.view,
                     depth_ops: Some(wgpu::Operations {
@@ -169,7 +177,8 @@ impl GraphicPass {
                     }),
                     stencil_ops: None,
                 }),*/
-            });*/
+            });
+            //render_pass.
             // This should depend on mesh informations mostly...
             // Should have an input Geometry (or mesh...). for all graphic pass.
             // Could be simple quad or more complex shape.
@@ -177,6 +186,7 @@ impl GraphicPass {
             // Bind group are coming from geometry... or srv view...
             /*render_pass.set_bind_group(0, &self.data.unwrap().bind_group_layout);
             render_pass.draw(vertices, instances);*/
+
         }
     }
     pub fn set_shader_resource_view(&mut self, index: u32, srv : Option<ResourceHandle<Texture>>) {
@@ -239,7 +249,7 @@ impl GraphicPassData {
         // Create attachments
         let mut render_targets = Vec::new();
         let mut render_targets_state = Vec::new();
-        for (i, render_target) in description.render_target_desc.iter().enumerate() {
+        for render_target in &description.render_target_desc {
             render_targets_state.push(Some(wgpu::ColorTargetState {
                 format: wgpu::TextureFormat::Rgba8Unorm,
                 blend: Some(wgpu::BlendState::REPLACE),
@@ -247,6 +257,7 @@ impl GraphicPassData {
             }));
             let mut attachment = Texture::default();
             attachment.set_size(render_target.width, render_target.height);
+            attachment.update_data(device);
             render_targets.push(Arc::new(Mutex::new(attachment)));
         }
 

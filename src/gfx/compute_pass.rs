@@ -25,3 +25,16 @@ impl Default for ComputePass {
         }
     }
 }
+
+impl ComputePass {
+    pub fn has_data(&self) -> bool {
+        return self.data.is_some();
+    }
+    pub fn update_data(&mut self, device: &wgpu::Device) {
+        let _ = device;
+    }
+    pub fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder) {
+        let _ = device;
+        let _ = cmd;
+    }
+}

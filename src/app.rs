@@ -1,7 +1,7 @@
 
 use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}, fmt::{self, Formatter}};
 
-use egui::{self, DragValue, TextStyle};
+use egui::{self, DragValue, TextStyle, Vec2};
 use egui_node_graph::*;
 
 use crate::gfx::{self, ResourceHandle};
@@ -132,6 +132,7 @@ pub enum ProtosResponse {
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProtosGraphState {
     pub backbuffer_node: Option<NodeId>,
+    pub available_size: egui::Vec2,
 }
 
 // =========== Then, you need to implement some traits ============
@@ -463,9 +464,8 @@ impl ProtosApp {
         backbuffer.update_data(&device);
 
         let view = backbuffer.get_view_handle().expect("No view in backbuffer");
-
+        // Could call update_egui_texture_from_wgpu_texture somehow
         let egui_texid = egui_rpass.egui_texture_from_wgpu_texture(&device, view, wgpu::FilterMode::Linear); // TODO: add toggle for linear / nearest.
-
 
         ProtosRenderTarget {
             backbuffer: Arc::new(Mutex::new(backbuffer)),
@@ -476,7 +476,8 @@ impl ProtosApp {
 
     pub fn new(_cc: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> Self 
     {
-        let render_target = Self::create_render_target(500, 500, device, egui_rpass);
+        let available_size = Vec2::new(500.0, 500.0);
+        let render_target = Self::create_render_target(available_size.x as u32, available_size.y as u32, device, egui_rpass);
 
         /// If the persistence feature is enabled, Called once before the first frame.
         /// Load previous app state (if any).
@@ -508,7 +509,7 @@ impl ProtosApp {
     }
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
-    pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) {
+    pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, cmd : &mut wgpu::CommandEncoder, egui_rpass : &mut egui_wgpu_backend::RenderPass) {
         let mut compile = false;
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -556,16 +557,16 @@ impl ProtosApp {
         }
         // Here we must create all resources & cache it & create command buffers...
         // Should have a RUN button.
-        if compile {
-            if let Some(node) = self.user_state.backbuffer_node {
-                if self.state.graph.nodes.contains_key(node) {
+        if let Some(node) = self.user_state.backbuffer_node {
+            if self.state.graph.nodes.contains_key(node) {
+                if compile {
+                    // Evaluate & create nodes
                     evaluate_node(device, &self.state.graph, node, &mut HashMap::new());
-                } else {
-                    self.user_state.backbuffer_node = None;
-                    println!("Backbuffer node was deleted OMGGGGGGG");
                 }
+                // Record node.
+                record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
             } else {
-                println!("No backbuffer node OMGGGGGGG");
+                self.user_state.backbuffer_node = None;
             }
         }
         // TODO: some control window for ui
@@ -607,6 +608,10 @@ pub fn evaluate_node(
                 // input not filled.
                 pass.clear_origin();
             }
+            pass.set_size(500, 500);
+            // Will call create if not created already.
+            pass.update_data(device);
+            println!("Backbuffer created.");
         },
         ProtosNodeTemplate::GraphicPass{ handle } => {
             // Here we should call all input_xxx, which will update the description of the graphic pass.
@@ -681,6 +686,69 @@ pub fn evaluate_node(
             populate_output(grap, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
         }*/
         _ => unimplemented!("Missing template implementation")
+    }
+}
+
+
+// Evaluates the input value of
+fn record_input(
+    device: &wgpu::Device,
+    cmd: &mut wgpu::CommandEncoder,
+    graph: &ProtosGraph,
+    node_id: NodeId,
+    param_name: &str,
+    outputs_cache: &mut OutputsCache,
+) {
+    let input_id = graph[node_id].get_input(param_name).unwrap();
+
+    // The output of another node is connected.
+    if let Some(other_output_id) = graph.connection(input_id) {
+        // The value was already computed due to the evaluation of some other
+        // node. We simply return value from the cache.
+        if let Some(other_value) = outputs_cache.get(&other_output_id) {
+            
+        }
+        // This is the first time encountering this node, so we need to
+        // recursively evaluate it.
+        else {
+            // Calling this will populate the cache
+            record_node(device, cmd, graph, graph[other_output_id].node, outputs_cache);
+        }
+    }
+}
+
+pub fn record_node(
+    device: &wgpu::Device,
+    cmd: &mut wgpu::CommandEncoder,
+    graph: &ProtosGraph,
+    node_id: NodeId,
+    outputs_cache: &mut OutputsCache,
+) {
+    // This will create data. 
+    let node = &graph[node_id];
+    match &node.user_data.template {
+        ProtosNodeTemplate::BackbufferPass{ handle } => {
+            let pass = handle.lock().unwrap();
+            if pass.has_data() {
+                record_input(device, cmd, graph, node_id, "input", outputs_cache);
+                pass.record_data(device, cmd);
+            }
+        },
+        ProtosNodeTemplate::GraphicPass{ handle } => {
+            let pass = handle.lock().unwrap();
+            if pass.has_data() {
+                // TODO: for loop
+                record_input(device, cmd, graph, node_id, "SRV0", outputs_cache);
+                pass.record_data(device, cmd);
+            }
+        },
+        ProtosNodeTemplate::ComputePass{ handle } => {
+            let pass = handle.lock().unwrap();
+            if pass.has_data() {
+                pass.record_data(device, cmd);
+            }
+        },
+        _ => {} // Not recordable.
     }
 }
 
