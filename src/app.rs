@@ -4,7 +4,7 @@ use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}, fmt::{self, For
 use egui::{self, DragValue, TextStyle};
 use egui_node_graph::*;
 
-use crate::gfx::{self};
+use crate::gfx;
 
 
 // ========= First, define your user data types =============
@@ -90,7 +90,7 @@ impl ProtosValueType {
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosNodeTemplate {
-    //Backbuffer { handle: Arc<Mutex<gfx::Texture>> }, // Just a texture.
+    //BackbufferPass { handle: Arc<Mutex<gfx::GraphicPass>> },
     GraphicPass { handle: Arc<Mutex<gfx::GraphicPass>> }, 
     ComputePass { handle: Arc<Mutex<gfx::ComputePass>> }, 
     Buffer { handle: Arc<Mutex<gfx::Buffer>> }, 
@@ -569,6 +569,8 @@ impl ProtosApp {
                     self.user_state.backbuffer_node = None;
                     println!("Backbuffer node was deleted OMGGGGGGG");
                 }
+            } else {
+                println!("No backbuffer node OMGGGGGGG");
             }
         }
         // TODO: some control window for ui
@@ -670,12 +672,7 @@ pub fn evaluate_node(
                     let s = srv.unwrap();
                     // Check input is valid type.
                     if let ProtosValueType::Texture { value } = s {
-                        // Check its data is filled.
-                        if value.is_some() {
-                            pass.set_shader_resource_view(i, value.unwrap());
-                        } else {
-                            pass.clear_shader_resource_view(i);
-                        }
+                        pass.set_shader_resource_view(i, value);
                     } else {
                         pass.clear_shader_resource_view(i);
                     }
@@ -687,7 +684,7 @@ pub fn evaluate_node(
             // If we pass UAV, they are outputs aswell...
             // Can pass a rt as input in order to render it.
             // TODO: find issue with render target : if we pass swapchain, need to be get.
-            for i in 0..1 {
+            /*for i in 0..1 {
                 let rt = evaluate_input(device, graph, node_id, "RT0", outputs_cache);
                 if rt.is_ok() {
                     let r = rt.unwrap();
@@ -700,55 +697,60 @@ pub fn evaluate_node(
                             pass.clear_render_target(i);
                         }
                     } else {
-
+                        pass.clear_render_target(i);
                     }
                 } else {
-                    // set dummy data...
+                    pass.clear_render_target(i);
                 }
-            }
-            // Will call create if not created already.
-            pass.update_data(device);
+            }*/
             
             // Output graphic pass will populate output. need to ensure data is created already.
-            populate_output(graph, outputs_cache, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(0) });
+            populate_output(graph, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(0) }, outputs_cache);
+            
+            // Will call create if not created already.
+            pass.update_data(device);
+            println!("Graphic pass created.");
         }
         ProtosNodeTemplate::ComputePass{ handle: _ } => {
             let a = evaluate_input(device, graph, node_id, "A", outputs_cache);
-            populate_output(graph, outputs_cache, node_id, "out", ProtosValueType::Texture { value: a.unwrap().try_to_texture().unwrap() });
+            populate_output(graph, node_id, "out", ProtosValueType::Texture { value: a.unwrap().try_to_texture().unwrap() }, outputs_cache);
         }
         ProtosNodeTemplate::Buffer{ handle } => {
             // Inputs for buffer are mostly data... scalar & co
+            // Could have buffer type aswell (camera, custom (script based ?), common data (time & res)...)
+            // Should be custom nodes instead for cleaner UX (only buffer behind the scene).
             let size = evaluate_input(device, graph, node_id, "Size", outputs_cache).unwrap().try_to_scalar();
             let format = evaluate_input(device, graph, node_id, "Format", outputs_cache).unwrap().try_to_vec2();
             let mut buffer = handle.lock().unwrap();
             buffer.update_data(device);
-            populate_output(graph, outputs_cache, node_id, "out", ProtosValueType::Buffer { value: Some(handle.clone()) });
+            populate_output(graph, node_id, "out", ProtosValueType::Buffer { value: Some(handle.clone()) }, outputs_cache);
         }
         ProtosNodeTemplate::Texture{ handle: _ } => {
             let scalar = evaluate_input(device, graph, node_id, "v1", outputs_cache);
             let vector = evaluate_input(device, graph, node_id, "v2", outputs_cache);
-            populate_output(graph, outputs_cache, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() });
+            populate_output(graph, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
         }
         /*ProtosNodeTemplate::Camera{ handle: _ } => {
             let scalar = evaluate_input(graph, node_id, "v1", outputs_cache);
             let vector = evaluate_input(graph, node_id, "v2", outputs_cache);
-            populate_output(graph, outputs_cache, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() });
+            populate_output(graph, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
         }
         ProtosNodeTemplate::Mesh{ handle: _ } => {
             let scalar = evaluate_input(graph, node_id, "x", outputs_cache);
             let vector = evaluate_input(graph, node_id, "y", outputs_cache);
-            populate_output(graph, outputs_cache, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() });
+            populate_output(grap, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
         }*/
         _ => unimplemented!("Missing template implementation")
     }
 }
 
+// Simply fill output with a value.
 fn populate_output(
     graph: &ProtosGraph,
-    outputs_cache: &mut OutputsCache,
     node_id: NodeId,
     param_name: &str,
     value: ProtosValueType,
+    outputs_cache: &mut OutputsCache,
 ) {
     let output_id = graph[node_id].get_output(param_name).unwrap();
     outputs_cache.insert(output_id, value.clone());

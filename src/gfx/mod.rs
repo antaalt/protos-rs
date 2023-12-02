@@ -1,25 +1,22 @@
+mod core;
 mod texture;
-mod gfx;
+mod buffer;
+mod graphic_pass;
+mod compute_pass;
 
-//pub use self::texture::Texture as TextureImage;
-//pub use self::gfx::RenderGraph;
-//pub use self::gfx::TextureHandle;
-//pub use self::gfx::ImageHandle;
-//pub use self::gfx::RawBufferHandle;
-//pub use self::gfx::ConstantBufferHandle;
-//pub use self::gfx::GraphicPassHandle;
-//pub use self::gfx::ComputePassHandle;
+mod camera;
+mod mesh;
 
-pub use self::gfx::GraphicPass;
-pub use self::gfx::ComputePass;
-pub use self::gfx::Buffer;
-pub use self::gfx::Texture;
-pub use self::gfx::Camera;
-pub use self::gfx::Mesh;
+pub use self::graphic_pass::GraphicPass;
+pub use self::compute_pass::ComputePass;
+pub use self::buffer::Buffer;
+pub use self::texture::Texture;
+pub use self::camera::Camera;
+pub use self::mesh::Mesh;
 
-pub use self::gfx::GraphicPassDescription;
-pub use self::gfx::ComputePassDescription;
-pub use self::gfx::BufferDescription;
-pub use self::gfx::TextureDescription;
-pub use self::gfx::CameraDescription;
-pub use self::gfx::MeshDescription;
+pub use self::graphic_pass::GraphicPassDescription;
+pub use self::compute_pass::ComputePassDescription;
+pub use self::buffer::BufferDescription;
+pub use self::texture::TextureDescription;
+pub use self::camera::CameraDescription;
+pub use self::mesh::MeshDescription;
