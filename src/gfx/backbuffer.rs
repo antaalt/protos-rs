@@ -32,6 +32,12 @@ impl BackbufferPass {
         self.desc.width = width;
         self.desc.height = height;
     }
+    pub fn get_width(&self) -> u32 {
+        self.desc.width
+    }
+    pub fn get_height(&self) -> u32 {
+        self.desc.height
+    }
     pub fn get_view_handle(&self) -> anyhow::Result<&wgpu::TextureView> {
         if self.data.is_some() {
             let d = self.data.as_ref().unwrap();

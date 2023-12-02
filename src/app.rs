@@ -1,5 +1,5 @@
 
-use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}, fmt::{self, Formatter}};
+use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}, fmt::{self, Formatter}, default};
 
 use egui::{self, DragValue, TextStyle, Vec2};
 use egui_node_graph::*;
@@ -133,6 +133,7 @@ pub enum ProtosResponse {
 pub struct ProtosGraphState {
     pub backbuffer_node: Option<NodeId>,
     pub available_size: egui::Vec2,
+    pub egui_texture_id: egui::TextureId,
 }
 
 // =========== Then, you need to implement some traits ============
@@ -448,37 +449,17 @@ pub struct ProtosApp {
     state: ProtosEditorState,
 
     user_state: ProtosGraphState,
-    
-    render_target : Option<ProtosRenderTarget>,
 }
 
 #[cfg(feature = "persistence")]
 const PERSISTENCE_KEY: &str = "protos_rs";
 
+type OutputsCache = HashMap<OutputId, ProtosValueType>;
+
 impl ProtosApp {
-
-    fn create_render_target(width: u32, height: u32, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> ProtosRenderTarget
-    {
-        let mut backbuffer = gfx::BackbufferPass::default();
-        backbuffer.set_size(width, height);
-        backbuffer.update_data(&device);
-
-        let view = backbuffer.get_view_handle().expect("No view in backbuffer");
-        // Could call update_egui_texture_from_wgpu_texture somehow
-        let egui_texid = egui_rpass.egui_texture_from_wgpu_texture(&device, view, wgpu::FilterMode::Linear); // TODO: add toggle for linear / nearest.
-
-        ProtosRenderTarget {
-            backbuffer: Arc::new(Mutex::new(backbuffer)),
-            egui: egui_texid,
-            size: egui::Vec2::new(width as f32, height as f32),
-        }
-    }
 
     pub fn new(_cc: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> Self 
     {
-        let available_size = Vec2::new(500.0, 500.0);
-        let render_target = Self::create_render_target(available_size.x as u32, available_size.y as u32, device, egui_rpass);
-
         /// If the persistence feature is enabled, Called once before the first frame.
         /// Load previous app state (if any).
         #[cfg(feature = "persistence")]
@@ -495,8 +476,11 @@ impl ProtosApp {
         }
         Self {
             state: ProtosEditorState::default(),
-            user_state: ProtosGraphState::default(),
-            render_target: Some(render_target),
+            user_state: ProtosGraphState{
+                backbuffer_node: None,
+                available_size: Vec2::new(500.0, 500.0),
+                egui_texture_id: egui::TextureId::default()
+            },
         }
     }
 
@@ -526,13 +510,42 @@ impl ProtosApp {
             .resizable(true)
             .default_width(ctx.used_size().x / 2.0)
             .show(ctx, |ui| {
-                let render_target_size = self.render_target.as_ref().unwrap().size;
-                let available_size = ui.available_size();
-                if available_size != render_target_size  {
-                    self.render_target = Some(Self::create_render_target(available_size.x as u32, available_size.y as u32, device, egui_rpass));
+                self.user_state.available_size = ui.available_size();
+                if self.user_state.backbuffer_node.is_some() {
+                    let node = &self.state.graph[self.user_state.backbuffer_node.unwrap()];
+
+                    match &node.user_data.template {
+                        ProtosNodeTemplate::BackbufferPass{ handle } => {
+                            let mut pass = handle.lock().unwrap();
+                            let render_target_size = egui::Vec2::new(pass.get_width() as f32, pass.get_height() as f32);
+                            if self.user_state.available_size != render_target_size  {
+                                // resize, egui texture id
+                                pass.set_size(self.user_state.available_size.x as u32, self.user_state.available_size.y as u32);
+                                // TODO: Should Mark dirty instead of updating here.
+                                pass.update_data(device);
+                                let view = pass.get_view_handle();
+                                
+                            }
+                            let view = pass.get_view_handle();
+                            match view {
+                                Ok(handle) => {
+                                    // Create resource if not created.
+                                    if self.user_state.egui_texture_id == egui::TextureId::default() {
+                                        self.user_state.egui_texture_id = egui_rpass.egui_texture_from_wgpu_texture(device, view.unwrap(), wgpu::FilterMode::Linear); // TODO: add toggle for linear / nearest.
+                                    }
+                                    ui.image(self.user_state.egui_texture_id, ui.available_size());
+                                },
+                                Err(e) => {
+                                    ui.label("View is loading.");
+                                }
+                            }
+                        }
+                        _ => panic!("Backbuffer node is node a backbuffer pass...")
+                    }
+                    
+                } else {
+                    ui.label("No backbuffer active.");
                 }
-                let render_target = self.render_target.as_ref().unwrap().egui;
-                ui.image(render_target, ui.available_size());
             });
         
         // Node graph
@@ -550,7 +563,10 @@ impl ProtosApp {
             // connection is created
             if let NodeResponse::User(user_event) = node_response {
                 match user_event {
-                    ProtosResponse::SetCurrentBackbuffer(node) => self.user_state.backbuffer_node = Some(node),
+                    ProtosResponse::SetCurrentBackbuffer(node) => {
+                        self.user_state.backbuffer_node = Some(node);
+                        compile = true;
+                    }
                     ProtosResponse::ClearCurrentBackbuffer => self.user_state.backbuffer_node = None,
                 }
             }
@@ -561,10 +577,10 @@ impl ProtosApp {
             if self.state.graph.nodes.contains_key(node) {
                 if compile {
                     // Evaluate & create nodes
-                    evaluate_node(device, &self.state.graph, node, &mut HashMap::new());
+                    self.evaluate_node(device, &self.state.graph, node, &mut HashMap::new());
                 }
                 // Record node.
-                record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
+                self.record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
             } else {
                 self.user_state.backbuffer_node = None;
             }
@@ -577,224 +593,228 @@ impl ProtosApp {
             ui.label("You would normally choose either panels OR windows.");
         });
     }
-}
 
-type OutputsCache = HashMap<OutputId, ProtosValueType>;
-
-/// Recursively evaluates all dependencies of this node, then evaluates the node itself.
-/// Should create all resources here & record command list.
-/// Here we return a single output. but node could have multiple outputs...
-pub fn evaluate_node(
-    device: &wgpu::Device,
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    outputs_cache: &mut OutputsCache,
-) {
-    // This will create data. 
-    let node = &graph[node_id];
-    match &node.user_data.template {
-        ProtosNodeTemplate::BackbufferPass{ handle } => {
-            let mut pass = handle.lock().unwrap();
-            let input = evaluate_input(device, graph, node_id, "input", outputs_cache);
-            if input.is_ok() {
-                let s = input.unwrap();
-                // Check input is valid type.
-                if let ProtosValueType::Texture { value } = s {
-                    pass.set_origin(value);
-                } else {
-                    pass.clear_origin();
-                }
-            } else {
-                // input not filled.
-                pass.clear_origin();
-            }
-            pass.set_size(500, 500);
-            // Will call create if not created already.
-            pass.update_data(device);
-            println!("Backbuffer created.");
-        },
-        ProtosNodeTemplate::GraphicPass{ handle } => {
-            // Here we should call all input_xxx, which will update the description of the graphic pass.
-            // We can then update or not the pipeline with given data.
-            // For recording command list, we will need something similar just running for graphic pass & compute pass.
-
-            let mut pass = handle.lock().unwrap();
-            // Input & co should be templated somewhere, trait to get these informations ?
-            for i in 0..1 {
-                //let name = format!("SRV{}", i)
-                let srv = evaluate_input(device, graph, node_id, "SRV0", outputs_cache);
-                // Check input is used
-                if srv.is_ok() {
-                    let s = srv.unwrap();
+    /// Recursively evaluates all dependencies of this node, then evaluates the node itself.
+    /// Should create all resources here & record command list.
+    /// Here we return a single output. but node could have multiple outputs...
+    pub fn evaluate_node(
+        &self,
+        device: &wgpu::Device,
+        graph: &ProtosGraph,
+        node_id: NodeId,
+        outputs_cache: &mut OutputsCache,
+    ) {
+        // This will create data. 
+        let node = &graph[node_id];
+        match &node.user_data.template {
+            ProtosNodeTemplate::BackbufferPass{ handle } => {
+                let mut pass = handle.lock().unwrap();
+                let input = self.evaluate_input(device, graph, node_id, "input", outputs_cache);
+                if input.is_ok() {
+                    let s = input.unwrap();
                     // Check input is valid type.
                     if let ProtosValueType::Texture { value } = s {
-                        pass.set_shader_resource_view(i, value);
+                        pass.set_origin(value);
                     } else {
-                        pass.clear_shader_resource_view(i);
+                        pass.clear_origin();
                     }
                 } else {
                     // input not filled.
-                    pass.clear_shader_resource_view(i);
+                    pass.clear_origin();
                 }
+                
+                pass.set_size(self.user_state.available_size.x as u32, self.user_state.available_size.y as u32);
+                // Will call create if not created already.
+                pass.update_data(device);
+                println!("Backbuffer created.");
+            },
+            ProtosNodeTemplate::GraphicPass{ handle } => {
+                // Here we should call all input_xxx, which will update the description of the graphic pass.
+                // We can then update or not the pipeline with given data.
+                // For recording command list, we will need something similar just running for graphic pass & compute pass.
+
+                let mut pass = handle.lock().unwrap();
+                // Input & co should be templated somewhere, trait to get these informations ?
+                for i in 0..1 {
+                    //let name = format!("SRV{}", i)
+                    let srv = self.evaluate_input(device, graph, node_id, "SRV0", outputs_cache);
+                    // Check input is used
+                    if srv.is_ok() {
+                        let s = srv.unwrap();
+                        // Check input is valid type.
+                        if let ProtosValueType::Texture { value } = s {
+                            pass.set_shader_resource_view(i, value);
+                        } else {
+                            pass.clear_shader_resource_view(i);
+                        }
+                    } else {
+                        // input not filled.
+                        pass.clear_shader_resource_view(i);
+                    }
+                }
+                let num_attachment = 1;
+                for i in 0..num_attachment {
+                    // Should gather these informations from a evaluate_output. -> reach output node, read its data & select informations.
+                    let mut desc = gfx::AttachmentDescription::default();
+                    desc.set_size(self.user_state.available_size.x as u32, self.user_state.available_size.y as u32);
+                    pass.set_render_target(0, &desc);
+                }
+                
+                // Will call create if not created already.
+                pass.update_data(device);
+                println!("Graphic pass created.");
+                
+                for i in 0..num_attachment {
+                    // Output graphic pass will populate output. need to ensure data is created already.
+                    // TODO: custom name per output. (MRT support)
+                    self.populate_output(graph, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(i) }, outputs_cache);
+                }
+                
             }
-            let num_attachment = 1;
-            for i in 0..num_attachment {
-                // Should gather these informations from a evaluate_output. -> reach output node, read its data & select informations.
-                let mut desc = gfx::AttachmentDescription::default();
-                desc.set_size(500, 500);
-                pass.set_render_target(0, &desc);
+            ProtosNodeTemplate::ComputePass{ handle: _ } => {
+                let a = self.evaluate_input(device, graph, node_id, "A", outputs_cache);
+                self.populate_output(graph, node_id, "out", ProtosValueType::Texture { value: a.unwrap().try_to_texture().unwrap() }, outputs_cache);
             }
-            
-            // Will call create if not created already.
-            pass.update_data(device);
-            println!("Graphic pass created.");
-            
-            for i in 0..num_attachment {
-                // Output graphic pass will populate output. need to ensure data is created already.
-                // TODO: custom name per output. (MRT support)
-                populate_output(graph, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(i) }, outputs_cache);
+            ProtosNodeTemplate::Buffer{ handle } => {
+                // Inputs for buffer are mostly data... scalar & co
+                // Could have buffer type aswell (camera, custom (script based ?), common data (time & res)...)
+                // Should be custom nodes instead for cleaner UX (only buffer behind the scene).
+                let size = self.evaluate_input(device, graph, node_id, "Size", outputs_cache).unwrap().try_to_scalar();
+                let format = self.evaluate_input(device, graph, node_id, "Format", outputs_cache).unwrap().try_to_vec2();
+                let mut buffer = handle.lock().unwrap();
+                buffer.update_data(device);
+                self.populate_output(graph, node_id, "out", ProtosValueType::Buffer { value: Some(handle.clone()) }, outputs_cache);
             }
-            
+            ProtosNodeTemplate::Texture{ handle: _ } => {
+                let scalar = self.evaluate_input(device, graph, node_id, "v1", outputs_cache);
+                let vector = self.evaluate_input(device, graph, node_id, "v2", outputs_cache);
+                self.populate_output(graph, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
+            }
+            /*ProtosNodeTemplate::Camera{ handle: _ } => {
+                let scalar = evaluate_input(graph, node_id, "v1", outputs_cache);
+                let vector = evaluate_input(graph, node_id, "v2", outputs_cache);
+                populate_output(graph, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
+            }
+            ProtosNodeTemplate::Mesh{ handle: _ } => {
+                let scalar = evaluate_input(graph, node_id, "x", outputs_cache);
+                let vector = evaluate_input(graph, node_id, "y", outputs_cache);
+                populate_output(grap, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
+            }*/
+            _ => unimplemented!("Missing template implementation")
         }
-        ProtosNodeTemplate::ComputePass{ handle: _ } => {
-            let a = evaluate_input(device, graph, node_id, "A", outputs_cache);
-            populate_output(graph, node_id, "out", ProtosValueType::Texture { value: a.unwrap().try_to_texture().unwrap() }, outputs_cache);
-        }
-        ProtosNodeTemplate::Buffer{ handle } => {
-            // Inputs for buffer are mostly data... scalar & co
-            // Could have buffer type aswell (camera, custom (script based ?), common data (time & res)...)
-            // Should be custom nodes instead for cleaner UX (only buffer behind the scene).
-            let size = evaluate_input(device, graph, node_id, "Size", outputs_cache).unwrap().try_to_scalar();
-            let format = evaluate_input(device, graph, node_id, "Format", outputs_cache).unwrap().try_to_vec2();
-            let mut buffer = handle.lock().unwrap();
-            buffer.update_data(device);
-            populate_output(graph, node_id, "out", ProtosValueType::Buffer { value: Some(handle.clone()) }, outputs_cache);
-        }
-        ProtosNodeTemplate::Texture{ handle: _ } => {
-            let scalar = evaluate_input(device, graph, node_id, "v1", outputs_cache);
-            let vector = evaluate_input(device, graph, node_id, "v2", outputs_cache);
-            populate_output(graph, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
-        }
-        /*ProtosNodeTemplate::Camera{ handle: _ } => {
-            let scalar = evaluate_input(graph, node_id, "v1", outputs_cache);
-            let vector = evaluate_input(graph, node_id, "v2", outputs_cache);
-            populate_output(graph, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
-        }
-        ProtosNodeTemplate::Mesh{ handle: _ } => {
-            let scalar = evaluate_input(graph, node_id, "x", outputs_cache);
-            let vector = evaluate_input(graph, node_id, "y", outputs_cache);
-            populate_output(grap, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
-        }*/
-        _ => unimplemented!("Missing template implementation")
     }
-}
 
 
-// Evaluates the input value of
-fn record_input(
-    device: &wgpu::Device,
-    cmd: &mut wgpu::CommandEncoder,
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    param_name: &str,
-    outputs_cache: &mut OutputsCache,
-) {
-    let input_id = graph[node_id].get_input(param_name).unwrap();
+    // Evaluates the input value of
+    fn record_input(
+        &self,
+        device: &wgpu::Device,
+        cmd: &mut wgpu::CommandEncoder,
+        graph: &ProtosGraph,
+        node_id: NodeId,
+        param_name: &str,
+        outputs_cache: &mut OutputsCache,
+    ) {
+        let input_id = graph[node_id].get_input(param_name).unwrap();
 
-    // The output of another node is connected.
-    if let Some(other_output_id) = graph.connection(input_id) {
-        // The value was already computed due to the evaluation of some other
-        // node. We simply return value from the cache.
-        if let Some(other_value) = outputs_cache.get(&other_output_id) {
-            
+        // The output of another node is connected.
+        if let Some(other_output_id) = graph.connection(input_id) {
+            // The value was already computed due to the evaluation of some other
+            // node. We simply return value from the cache.
+            if let Some(other_value) = outputs_cache.get(&other_output_id) {
+                
+            }
+            // This is the first time encountering this node, so we need to
+            // recursively evaluate it.
+            else {
+                // Calling this will populate the cache
+                self.record_node(device, cmd, graph, graph[other_output_id].node, outputs_cache);
+            }
         }
-        // This is the first time encountering this node, so we need to
-        // recursively evaluate it.
+    }
+
+    pub fn record_node(
+        &self,
+        device: &wgpu::Device,
+        cmd: &mut wgpu::CommandEncoder,
+        graph: &ProtosGraph,
+        node_id: NodeId,
+        outputs_cache: &mut OutputsCache,
+    ) {
+        // This will create data. 
+        let node = &graph[node_id];
+        match &node.user_data.template {
+            ProtosNodeTemplate::BackbufferPass{ handle } => {
+                let pass = handle.lock().unwrap();
+                if pass.has_data() {
+                    self.record_input(device, cmd, graph, node_id, "input", outputs_cache);
+                    pass.record_data(device, cmd);
+                }
+            },
+            ProtosNodeTemplate::GraphicPass{ handle } => {
+                let pass = handle.lock().unwrap();
+                if pass.has_data() {
+                    // TODO: for loop
+                    self.record_input(device, cmd, graph, node_id, "SRV0", outputs_cache);
+                    pass.record_data(device, cmd);
+                }
+            },
+            ProtosNodeTemplate::ComputePass{ handle } => {
+                let pass = handle.lock().unwrap();
+                if pass.has_data() {
+                    pass.record_data(device, cmd);
+                }
+            },
+            _ => {} // Not recordable.
+        }
+    }
+
+    // Simply fill output with a value.
+    fn populate_output(
+        &self,
+        graph: &ProtosGraph,
+        node_id: NodeId,
+        param_name: &str,
+        value: ProtosValueType,
+        outputs_cache: &mut OutputsCache,
+    ) {
+        let output_id = graph[node_id].get_output(param_name).unwrap();
+        outputs_cache.insert(output_id, value.clone());
+    }
+
+    // Evaluates the input value of
+    fn evaluate_input(
+        &self,
+        device: &wgpu::Device,
+        graph: &ProtosGraph,
+        node_id: NodeId,
+        param_name: &str,
+        outputs_cache: &mut OutputsCache,
+    ) -> anyhow::Result<ProtosValueType> {
+        let input_id = graph[node_id].get_input(param_name)?;
+
+        // The output of another node is connected.
+        if let Some(other_output_id) = graph.connection(input_id) {
+            // The value was already computed due to the evaluation of some other
+            // node. We simply return value from the cache.
+            if let Some(other_value) = outputs_cache.get(&other_output_id) {
+                Ok(other_value.clone())
+            }
+            // This is the first time encountering this node, so we need to
+            // recursively evaluate it.
+            else {
+                // Calling this will populate the cache
+                self.evaluate_node(device, graph, graph[other_output_id].node, outputs_cache);
+
+                // Now that we know the value is cached, return it
+                Ok(outputs_cache
+                    .get(&other_output_id)
+                    .expect("Cache should be populated").clone())
+            }
+        }
+        // No existing connection, take the inline value instead.
         else {
-            // Calling this will populate the cache
-            record_node(device, cmd, graph, graph[other_output_id].node, outputs_cache);
+            Ok(graph[input_id].value.clone())
         }
-    }
-}
-
-pub fn record_node(
-    device: &wgpu::Device,
-    cmd: &mut wgpu::CommandEncoder,
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    outputs_cache: &mut OutputsCache,
-) {
-    // This will create data. 
-    let node = &graph[node_id];
-    match &node.user_data.template {
-        ProtosNodeTemplate::BackbufferPass{ handle } => {
-            let pass = handle.lock().unwrap();
-            if pass.has_data() {
-                record_input(device, cmd, graph, node_id, "input", outputs_cache);
-                pass.record_data(device, cmd);
-            }
-        },
-        ProtosNodeTemplate::GraphicPass{ handle } => {
-            let pass = handle.lock().unwrap();
-            if pass.has_data() {
-                // TODO: for loop
-                record_input(device, cmd, graph, node_id, "SRV0", outputs_cache);
-                pass.record_data(device, cmd);
-            }
-        },
-        ProtosNodeTemplate::ComputePass{ handle } => {
-            let pass = handle.lock().unwrap();
-            if pass.has_data() {
-                pass.record_data(device, cmd);
-            }
-        },
-        _ => {} // Not recordable.
-    }
-}
-
-// Simply fill output with a value.
-fn populate_output(
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    param_name: &str,
-    value: ProtosValueType,
-    outputs_cache: &mut OutputsCache,
-) {
-    let output_id = graph[node_id].get_output(param_name).unwrap();
-    outputs_cache.insert(output_id, value.clone());
-}
-
-// Evaluates the input value of
-fn evaluate_input(
-    device: &wgpu::Device,
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    param_name: &str,
-    outputs_cache: &mut OutputsCache,
-) -> anyhow::Result<ProtosValueType> {
-    let input_id = graph[node_id].get_input(param_name)?;
-
-    // The output of another node is connected.
-    if let Some(other_output_id) = graph.connection(input_id) {
-        // The value was already computed due to the evaluation of some other
-        // node. We simply return value from the cache.
-        if let Some(other_value) = outputs_cache.get(&other_output_id) {
-            Ok(other_value.clone())
-        }
-        // This is the first time encountering this node, so we need to
-        // recursively evaluate it.
-        else {
-            // Calling this will populate the cache
-            evaluate_node(device, graph, graph[other_output_id].node, outputs_cache);
-
-            // Now that we know the value is cached, return it
-            Ok(outputs_cache
-                .get(&other_output_id)
-                .expect("Cache should be populated").clone())
-        }
-    }
-    // No existing connection, take the inline value instead.
-    else {
-        Ok(graph[input_id].value.clone())
     }
 }
