@@ -256,6 +256,7 @@ impl GraphicPassData {
         }
     }
 }
+
 impl Default for GraphicPass {
     fn default() -> Self {
         Self {

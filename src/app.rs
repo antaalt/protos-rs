@@ -4,7 +4,7 @@ use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}, fmt::{self, For
 use egui::{self, DragValue, TextStyle};
 use egui_node_graph::*;
 
-use crate::gfx;
+use crate::gfx::{self, ResourceHandle};
 
 
 // ========= First, define your user data types =============
@@ -90,7 +90,7 @@ impl ProtosValueType {
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosNodeTemplate {
-    //BackbufferPass { handle: Arc<Mutex<gfx::GraphicPass>> },
+    BackbufferPass { handle: Arc<Mutex<gfx::BackbufferPass>> },
     GraphicPass { handle: Arc<Mutex<gfx::GraphicPass>> }, 
     ComputePass { handle: Arc<Mutex<gfx::ComputePass>> }, 
     Buffer { handle: Arc<Mutex<gfx::Buffer>> }, 
@@ -103,13 +103,14 @@ impl ProtosNodeTemplate {
     pub fn can_be_recorded(&self) -> bool {
         match self {
             // Can
-            ProtosNodeTemplate::GraphicPass{ handle } => true,
-            ProtosNodeTemplate::ComputePass{ handle } => true,
+            ProtosNodeTemplate::BackbufferPass{ .. } => true,
+            ProtosNodeTemplate::GraphicPass{ .. } => true,
+            ProtosNodeTemplate::ComputePass{ .. } => true,
             // Cannot
-            ProtosNodeTemplate::Buffer{ handle } => false,
-            ProtosNodeTemplate::Texture{ handle } => false,
-            ProtosNodeTemplate::Camera{ handle } => false,
-            ProtosNodeTemplate::Mesh{ handle } => false,
+            ProtosNodeTemplate::Buffer{ .. } => false,
+            ProtosNodeTemplate::Texture{ .. } => false,
+            ProtosNodeTemplate::Camera{ .. } => false,
+            ProtosNodeTemplate::Mesh{ .. } => false,
         }
     }
 }
@@ -120,8 +121,8 @@ impl ProtosNodeTemplate {
 /// mechanism allows creating additional side effects from user code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProtosResponse {
-    SetActiveNode(NodeId),
-    ClearActiveNode,
+    SetCurrentBackbuffer(NodeId),
+    ClearCurrentBackbuffer,
 }
 
 /// The graph 'global' state. This state struct is passed around to the node and
@@ -170,6 +171,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
 
     fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
         Cow::Borrowed(match self {
+            ProtosNodeTemplate::BackbufferPass{ .. } => "New Backbuffer", // TODO: should not be able to create backbuffer...
             ProtosNodeTemplate::GraphicPass{ .. } => "New graphic pass",
             ProtosNodeTemplate::ComputePass{ .. } => "New compute pass",
             ProtosNodeTemplate::Buffer{ .. } => "New buffer",
@@ -227,18 +229,21 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
 
         // This need to match evaluate_node
         match self {
-            ProtosNodeTemplate::GraphicPass{ handle } => {
+            ProtosNodeTemplate::BackbufferPass{ handle: _ } => {
+                input_texture(graph, "input".into());
+            }
+            ProtosNodeTemplate::GraphicPass{ handle: _ } => {
                 // TODO for loop
                 input_texture(graph, "SRV0".into());
                 // TODO for loop
                 output_texture(graph, "RT0".into());
             }
-            ProtosNodeTemplate::ComputePass{ handle } => {
+            ProtosNodeTemplate::ComputePass{ handle: _ } => {
                 // TODO for loop
                 input_image(graph, "UAV0".into());
                 output_texture(graph, "UAV0".into());
             }
-            ProtosNodeTemplate::Buffer{ handle } => {
+            ProtosNodeTemplate::Buffer{ handle: _ } => {
                 graph.add_input_param(
                     node_id,
                     String::from("Size"),
@@ -261,17 +266,17 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
                     ProtosDataType::Buffer
                 );
             }
-            ProtosNodeTemplate::Texture{ handle } => {
+            ProtosNodeTemplate::Texture{ handle: _ } => {
                 input_image(graph, "v1");
                 input_image(graph, "v2");
                 output_texture(graph, "out");
             }
-            ProtosNodeTemplate::Camera{ handle } => {
+            ProtosNodeTemplate::Camera{ handle: _ } => {
                 input_image(graph, "v1");
                 input_image(graph, "v2");
                 output_texture(graph, "out");
             }
-            ProtosNodeTemplate::Mesh{ handle } => {
+            ProtosNodeTemplate::Mesh{ handle: _ } => {
                 input_texture(graph, "x");
                 input_texture(graph, "y");
                 output_texture(graph, "out");
@@ -289,6 +294,7 @@ impl NodeTemplateIter for AllProtosNodeTemplates {
         // will use to display it to the user. Crates like strum can reduce the
         // boilerplate in enumerating all variants of an enum.
         vec![
+            ProtosNodeTemplate::BackbufferPass { handle: Arc::default() }, // TODO: should not need this.
             ProtosNodeTemplate::GraphicPass{ handle: Arc::default() },
             ProtosNodeTemplate::ComputePass{ handle: Arc::default() },
             ProtosNodeTemplate::Buffer{ handle: Arc::default() },
@@ -384,13 +390,21 @@ impl NodeDataTrait for ProtosNodeData {
     where
         ProtosResponse: UserResponseTrait,
     {
+        match &self.template {
+            ProtosNodeTemplate::BackbufferPass { .. } => {
+                // We only want bottom UI for backbuffer pass node.
+            }
+            _ => { 
+                return vec![]; 
+            }
+        }
         // This logic is entirely up to the user. In this case, we check if the
         // current node we're drawing is the active one, by comparing against
         // the value stored in the global user state, and draw different button
         // UIs based on that.
 
         let mut responses = vec![];
-        /*let is_active = user_state
+        let is_active = user_state
             .backbuffer_node
             .map(|id| id == node_id)
             .unwrap_or(false);
@@ -401,16 +415,16 @@ impl NodeDataTrait for ProtosNodeData {
         // has been drawn. See below at the update method for an example.
         if !is_active {
             if ui.button("👁 Set active").clicked() {
-                responses.push(NodeResponse::User(ProtosResponse::SetActiveNode(node_id)));
+                responses.push(NodeResponse::User(ProtosResponse::SetCurrentBackbuffer(node_id)));
             }
         } else {
             let button =
                 egui::Button::new(egui::RichText::new("👁 Active").color(egui::Color32::BLACK))
                     .fill(egui::Color32::GOLD);
             if ui.add(button).clicked() {
-                responses.push(NodeResponse::User(ProtosResponse::ClearActiveNode));
+                responses.push(NodeResponse::User(ProtosResponse::ClearCurrentBackbuffer));
             }
-        }*/
+        }
 
         responses
     }
@@ -420,8 +434,7 @@ type ProtosGraph = Graph<ProtosNodeData, ProtosDataType, ProtosValueType>;
 type ProtosEditorState = GraphEditorState<ProtosNodeData, ProtosDataType, ProtosValueType, ProtosNodeTemplate, ProtosGraphState>;
 
 struct ProtosRenderTarget {
-    texture: wgpu::Texture,
-    view: wgpu::TextureView,
+    backbuffer : gfx::ResourceHandle<gfx::BackbufferPass>,
 
     egui: egui::TextureId,
     size: egui::Vec2,
@@ -434,8 +447,6 @@ pub struct ProtosApp {
     state: ProtosEditorState,
 
     user_state: ProtosGraphState,
-
-    //render_graph: gfx::RenderGraph,
     
     render_target : Option<ProtosRenderTarget>,
 }
@@ -447,41 +458,26 @@ impl ProtosApp {
 
     fn create_render_target(width: u32, height: u32, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> ProtosRenderTarget
     {
-        let label = Some("RenderTarget");
-        let size = wgpu::Extent3d {
-            width: 500,
-            height: 500,
-            depth_or_array_layers: 1,
-        };
-        let texture_format = wgpu::TextureFormat::Rgba8Unorm;
-        let texture_view_format = texture_format;
-        let texture = device.create_texture(
-            &wgpu::TextureDescriptor {
-                label,
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: texture_format,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                //view_formats: &[texture_view_format],
-            }
-        );
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut backbuffer = gfx::BackbufferPass::default();
+        backbuffer.set_size(width, height);
+        backbuffer.update_data(&device);
 
-        let egui_texid = egui_rpass.egui_texture_from_wgpu_texture(&device, &view, wgpu::FilterMode::Linear); // TODO: add toggle for linear / nearest.
+        let view = backbuffer.get_view_handle().expect("No view in backbuffer");
+
+        let egui_texid = egui_rpass.egui_texture_from_wgpu_texture(&device, view, wgpu::FilterMode::Linear); // TODO: add toggle for linear / nearest.
+
 
         ProtosRenderTarget {
-            texture, 
-            view,
+            backbuffer: Arc::new(Mutex::new(backbuffer)),
             egui: egui_texid,
             size: egui::Vec2::new(width as f32, height as f32),
         }
     }
 
-    pub fn new(cc: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> Self 
+    pub fn new(_cc: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> Self 
     {
-        let texture = Self::create_render_target(500, 500, device, egui_rpass);
+        let render_target = Self::create_render_target(500, 500, device, egui_rpass);
+
         /// If the persistence feature is enabled, Called once before the first frame.
         /// Load previous app state (if any).
         #[cfg(feature = "persistence")]
@@ -492,15 +488,14 @@ impl ProtosApp {
                 .unwrap_or_default();
             Self {
                 state,
-                user_state: ProtosGraphState::default(),
+                ProtosGraphState::default(),
                 render_target: texture,
             }*/
         }
         Self {
             state: ProtosEditorState::default(),
             user_state: ProtosGraphState::default(),
-            //render_graph: RenderGraph::default(),
-            render_target: Some(texture),
+            render_target: Some(render_target),
         }
     }
 
@@ -548,17 +543,17 @@ impl ProtosApp {
             .inner;
 
         // This might not be necessary for protos...
-        /*for node_response in graph_response.node_responses {
+        for node_response in graph_response.node_responses {
             // Here, we ignore all other graph events. But you may find
             // some use for them. For example, by playing a sound when a new
             // connection is created
             if let NodeResponse::User(user_event) = node_response {
                 match user_event {
-                    ProtosResponse::SetActiveNode(node) => self.user_state.active_node = Some(node),
-                    ProtosResponse::ClearActiveNode => self.user_state.active_node = None,
+                    ProtosResponse::SetCurrentBackbuffer(node) => self.user_state.backbuffer_node = Some(node),
+                    ProtosResponse::ClearCurrentBackbuffer => self.user_state.backbuffer_node = None,
                 }
             }
-        }*/
+        }
         // Here we must create all resources & cache it & create command buffers...
         // Should have a RUN button.
         if compile {
@@ -594,69 +589,25 @@ pub fn evaluate_node(
     node_id: NodeId,
     outputs_cache: &mut OutputsCache,
 ) {
-    // To solve a similar problem as creating node types above, we define an
-    // Evaluator as a convenience. It may be overkill for this small example,
-    // but something like this makes the code much more readable when the
-    // number of nodes starts growing.
-
-    /*struct Evaluator<'a> {
-        graph: &'a ProtosGraph,
-        outputs_cache: &'a mut OutputsCache,
-        node_id: NodeId,
-    }
-    impl<'a> Evaluator<'a> {
-        fn new(graph: &'a ProtosGraph, outputs_cache: &'a mut OutputsCache, node_id: NodeId) -> Self {
-            Self {
-                graph,
-                outputs_cache,
-                node_id,
-            }
-        }
-        fn evaluate_input(&mut self, name: &str) -> anyhow::Result<ProtosValueType> {
-            // Calling `evaluate_input` recursively evaluates other nodes in the
-            // graph until the input value for a paramater has been computed.
-            evaluate_input(self.graph, self.node_id, name, self.outputs_cache)
-        }
-        fn populate_output(
-            &mut self,
-            name: &str,
-            value: ProtosValueType,
-        ) -> anyhow::Result<ProtosValueType> {
-            // After computing an output, we don't just return it, but we also
-            // populate the outputs cache with it. This ensures the evaluation
-            // only ever computes an output once.
-            //
-            // The return value of the function is the "final" output of the
-            // node, the thing we want to get from the evaluation. The example
-            // would be slightly more contrived when we had multiple output
-            // values, as we would need to choose which of the outputs is the
-            // one we want to return. Other outputs could be used as
-            // intermediate values.
-            //
-            // Note that this is just one possible semantic interpretation of
-            // the graphs, you can come up with your own evaluation semantics!
-            populate_output(self.graph, self.outputs_cache, self.node_id, name, value)
-        }
-        fn input_image(&mut self, name: &str) -> anyhow::Result<Option<Arc<Mutex<gfx::Texture>>>> {
-            self.evaluate_input(name)?.try_to_image()
-        }
-        fn input_texture(&mut self, name: &str) -> anyhow::Result<Option<Arc<Mutex<gfx::Texture>>>> {
-            self.evaluate_input(name)?.try_to_texture()
-        }
-        fn output_image(&mut self, name: &str, value: Option<Arc<Mutex<gfx::Texture>>>) -> anyhow::Result<ProtosValueType> {
-            self.populate_output(name, ProtosValueType::Image { value })
-        }
-        fn output_texture(&mut self, name: &str, value: Option<Arc<Mutex<gfx::Texture>>>) -> anyhow::Result<ProtosValueType> {
-            self.populate_output(name, ProtosValueType::Texture { value })
-        }
-        fn output_graphic_pass(&mut self, name: &str, rt0: Option<Arc<Mutex<gfx::Texture>>>) -> anyhow::Result<ProtosValueType> {
-            self.populate_output(name, ProtosValueType::Texture { value: rt0 })
-        }
-    }*/
     // This will create data. 
     let node = &graph[node_id];
-    //let mut evaluator = Evaluator::new(graph, outputs_cache, node_id);
     match &node.user_data.template {
+        ProtosNodeTemplate::BackbufferPass{ handle } => {
+            let mut pass = handle.lock().unwrap();
+            let input = evaluate_input(device, graph, node_id, "input", outputs_cache);
+            if input.is_ok() {
+                let s = input.unwrap();
+                // Check input is valid type.
+                if let ProtosValueType::Texture { value } = s {
+                    pass.set_origin(value);
+                } else {
+                    pass.clear_origin();
+                }
+            } else {
+                // input not filled.
+                pass.clear_origin();
+            }
+        },
         ProtosNodeTemplate::GraphicPass{ handle } => {
             // Here we should call all input_xxx, which will update the description of the graphic pass.
             // We can then update or not the pipeline with given data.

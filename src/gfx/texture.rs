@@ -40,7 +40,43 @@ impl Default for Texture {
         }
     }
 }
+impl Texture {
+    
+    pub fn get_handle(&self) -> anyhow::Result<&wgpu::Texture> {
+        if self.data.is_some() {
+            Ok(&self.data.as_ref().unwrap().texture)
+        } else {
+            Err(anyhow!("No data"))
+        }
+    }
+    pub fn get_view_handle(&self) -> anyhow::Result<&wgpu::TextureView> {
+        if self.data.is_some() {
+            Ok(&self.data.as_ref().unwrap().view)
+        } else {
+            Err(anyhow!("No data"))
+        }
+    }
+    pub fn set_size(&mut self, width: u32, height: u32) {
+        self.set_width(width);
+        self.set_height(height);
+    }
+    pub fn set_width(&mut self, width: u32) {
+        self.desc.width = width;
+    }
+    pub fn set_height(&mut self, height: u32) {
+        self.desc.height = height;
+    }
+
+    pub fn update_data(&mut self, device: &wgpu::Device) {
+        if self.data.is_some() {
+            self.data = Some(TextureData::new(device, &self.desc))
+        } else {
+            self.data = Some(TextureData::new(device, &self.desc))
+        }
+    }
+}
 impl TextureDescription {
+
     pub fn from_bytes(
         bytes: &[u8], 
         label: &str,
@@ -102,7 +138,7 @@ impl TextureDescription {
     }
 }
 impl TextureData {
-    fn new(device :&wgpu::Device, queue : &wgpu::Queue, desc: &TextureDescription) -> Self {
+    fn new(device :&wgpu::Device, desc: &TextureDescription) -> Self {
         let size = wgpu::Extent3d {
             width: desc.width,
             height: desc.height,
@@ -127,22 +163,6 @@ impl TextureData {
             }
         );
 
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                aspect: wgpu::TextureAspect::All,
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            desc.data.as_ref(),
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * desc.width),
-                rows_per_image: std::num::NonZeroU32::new(desc.height),
-            },
-            size,
-        );
-
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(
             &wgpu::SamplerDescriptor {
@@ -157,5 +177,29 @@ impl TextureData {
         );
         
         Self { texture, view, sampler }
+    }
+    fn write(&self, device: &wgpu::Device, queue: &wgpu::Queue, desc: &TextureDescription)
+    {
+        let size = wgpu::Extent3d {
+            width: desc.width,
+            height: desc.height,
+            depth_or_array_layers: 1,
+        };
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                aspect: wgpu::TextureAspect::All,
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            desc.data.as_ref(),
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: std::num::NonZeroU32::new(4 * desc.width),
+                rows_per_image: std::num::NonZeroU32::new(desc.height),
+            },
+            size,
+        );
+    
     }
 }
