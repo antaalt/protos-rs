@@ -131,9 +131,11 @@ pub enum ProtosResponse {
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProtosGraphState {
-    pub backbuffer_node: Option<NodeId>,
-    pub available_size: egui::Vec2,
-    pub egui_texture_id: egui::TextureId,
+    backbuffer_node: Option<NodeId>,
+    available_size: egui::Vec2,
+    egui_image_filter: wgpu::FilterMode,
+    egui_texture_id: egui::TextureId,
+    dirty_egui_texture: bool,
 }
 
 // =========== Then, you need to implement some traits ============
@@ -479,7 +481,9 @@ impl ProtosApp {
             user_state: ProtosGraphState{
                 backbuffer_node: None,
                 available_size: Vec2::new(500.0, 500.0),
-                egui_texture_id: egui::TextureId::default()
+                egui_image_filter: wgpu::FilterMode::Nearest,
+                egui_texture_id: egui::TextureId::default(),
+                dirty_egui_texture: false,
             },
         }
     }
@@ -510,6 +514,20 @@ impl ProtosApp {
             .default_width(ctx.used_size().x / 2.0)
             .resizable(true)
             .show(ctx, |ui| {
+                egui::menu::bar(ui, |ui| {
+                    egui::widgets::global_dark_light_mode_switch(ui);
+                    // Do we really need those ? Texture size exactly match the UI...
+                    ui.menu_button("Sampling", |ui| {
+                        if ui.button("Nearest").clicked() {
+                            self.user_state.egui_image_filter = wgpu::FilterMode::Nearest;
+                            self.user_state.dirty_egui_texture = true;
+                        }
+                        if ui.button("Linear").clicked() {
+                            self.user_state.egui_image_filter = wgpu::FilterMode::Linear;
+                            self.user_state.dirty_egui_texture = true;
+                        }
+                    });
+                });
                 self.user_state.available_size = ui.available_size();
                 if self.user_state.backbuffer_node.is_some() {
                     let node = &self.state.graph[self.user_state.backbuffer_node.unwrap()];
@@ -521,22 +539,29 @@ impl ProtosApp {
                             if self.user_state.available_size != render_target_size  {
                                 // resize, egui texture id
                                 pass.set_size(self.user_state.available_size.x as u32, self.user_state.available_size.y as u32);
-                                // TODO: Should Mark dirty instead of updating here.
-                                pass.update_data(device);
-                                let view = pass.get_view_handle();
-                                
                             }
-                            let view = pass.get_view_handle();
-                            match view {
-                                Ok(handle) => {
+                            let view_result = pass.get_view_handle();
+                            match view_result {
+                                Ok(..) => {
+                                    let view = view_result.unwrap();
                                     // Create resource if not created.
                                     if self.user_state.egui_texture_id == egui::TextureId::default() {
-                                        self.user_state.egui_texture_id = egui_rpass.egui_texture_from_wgpu_texture(device, view.unwrap(), wgpu::FilterMode::Linear); // TODO: add toggle for linear / nearest.
+                                        self.user_state.egui_texture_id = egui_rpass.egui_texture_from_wgpu_texture(device, view, self.user_state.egui_image_filter);
+                                    }
+                                    if self.user_state.dirty_egui_texture {
+                                        let update_result = egui_rpass.update_egui_texture_from_wgpu_texture(
+                                            device, 
+                                            view,
+                                            self.user_state.egui_image_filter, 
+                                            self.user_state.egui_texture_id
+                                        );
+                                        assert!(update_result.is_ok());
                                     }
                                     ui.image(self.user_state.egui_texture_id, ui.available_size());
                                 },
                                 Err(e) => {
-                                    ui.add_sized(ui.available_size(), egui::Label::new("View is loading."));
+                                    let message = format!("{}", e);
+                                    ui.add_sized(ui.available_size(), egui::Label::new(message));
                                 }
                             }
                         }
@@ -575,10 +600,10 @@ impl ProtosApp {
         // Should have a RUN button.
         if let Some(node) = self.user_state.backbuffer_node {
             if self.state.graph.nodes.contains_key(node) {
-                if compile {
+                //if compile {
                     // Evaluate & create nodes
                     self.evaluate_node(device, &self.state.graph, node, &mut HashMap::new());
-                }
+                //}
                 // Record node.
                 self.record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
             } else {
@@ -626,7 +651,6 @@ impl ProtosApp {
                 pass.set_size(self.user_state.available_size.x as u32, self.user_state.available_size.y as u32);
                 // Will call create if not created already.
                 pass.update_data(device);
-                println!("Backbuffer created.");
             },
             ProtosNodeTemplate::GraphicPass{ handle } => {
                 // Here we should call all input_xxx, which will update the description of the graphic pass.
@@ -662,7 +686,6 @@ impl ProtosApp {
                 
                 // Will call create if not created already.
                 pass.update_data(device);
-                println!("Graphic pass created.");
                 
                 for i in 0..num_attachment {
                     // Output graphic pass will populate output. need to ensure data is created already.

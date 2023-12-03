@@ -71,7 +71,7 @@ impl Vertex for StaticVertex {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AttachmentDescription {
     width: u32,
     height: u32,
@@ -106,7 +106,8 @@ pub struct GraphicPassData {
 }
 pub struct GraphicPass {
     desc: GraphicPassDescription,
-    data: Option<GraphicPassData>
+    data: Option<GraphicPassData>,
+    dirty: bool,
 }
 
 impl Default for GraphicPassDescription {
@@ -120,8 +121,8 @@ impl Default for GraphicPassDescription {
 }
 fn default_bind_group_entry(index : u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
-        binding: 0,
-        visibility:wgpu::ShaderStages::NONE,
+        binding: index,
+        visibility:wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
         ty: wgpu::BindingType::Texture { 
             sample_type: wgpu::TextureSampleType::Float { filterable: true }, 
             view_dimension: wgpu::TextureViewDimension::D2, 
@@ -135,11 +136,10 @@ impl GraphicPass {
         self.data.is_some()
     }
     pub fn update_data(&mut self, device : &wgpu::Device) {
-        if self.data.is_some() {
-            // TODO: check if this is enough & resources are correctly cleared...
-            self.data = Some(GraphicPassData::new(device, &self.desc))
-        } else {
-            self.data = Some(GraphicPassData::new(device, &self.desc))
+        if self.dirty {
+            self.data = Some(GraphicPassData::new(device, &self.desc));
+            self.dirty = false;
+            println!("Graphic pass created.");
         }
     }
     pub fn record_data(&self, device : &wgpu::Device, cmd: &mut wgpu::CommandEncoder) {
@@ -195,10 +195,11 @@ impl GraphicPass {
             self.desc.shader_resource_view.resize(index as usize + 1, None);
             self.desc.bind_group.resize(1, Vec::new());
             self.desc.bind_group[0].resize(index as usize + 1, default_bind_group_entry(index));
+            self.dirty = true;
         }
         if srv.is_some() {
-            let texture_locked = srv.clone().unwrap();
-            let texture = texture_locked.lock().unwrap();            
+            //let texture_locked = srv.clone().unwrap();
+            //let texture = texture_locked.lock().unwrap();            
             self.desc.bind_group[0][index as usize].binding = index;
             self.desc.bind_group[0][index as usize].count = None;
             self.desc.bind_group[0][index as usize].ty = wgpu::BindingType::Texture { 
@@ -207,10 +208,14 @@ impl GraphicPass {
                 multisampled: false
             };
             self.desc.bind_group[0][index as usize].visibility = wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT;
+            //self.dirty = true; // TODO: set dirty accordingly.
         } else {
-            self.desc.bind_group[0][index as usize] = default_bind_group_entry(index);
+            let default = default_bind_group_entry(index);
+            if self.desc.bind_group[0][index as usize] != default {
+                self.desc.bind_group[0][index as usize] = default;
+                self.dirty = true;
+            }
         }
-
         self.desc.shader_resource_view[index as usize] = srv;
     }
     pub fn clear_shader_resource_view(&mut self, index: u32) {
@@ -219,8 +224,12 @@ impl GraphicPass {
     pub fn set_render_target(&mut self, index: u32, rt : &AttachmentDescription) {
         if index as usize >= self.desc.render_target_desc.len() {
             self.desc.render_target_desc.resize(index as usize + 1, AttachmentDescription::default());
+            self.dirty = true;
         }
-        self.desc.render_target_desc[index as usize] = rt.clone();
+        if self.desc.render_target_desc[index as usize] != *rt {
+            self.desc.render_target_desc[index as usize] = rt.clone();
+            self.dirty = true;
+        }
     }
     pub fn get_render_target(&self, index: u32) -> Option<ResourceHandle<Texture>> {
         if self.data.is_some() {
@@ -329,6 +338,7 @@ impl Default for GraphicPass {
         Self {
             desc: GraphicPassDescription::default(),
             data: None,
+            dirty: true,
         }
     }
 }
