@@ -9,7 +9,6 @@ use chrono::Timelike;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use winit::event::Event::*;
-use winit::event_loop::ControlFlow;
 const INITIAL_WIDTH: u32 = 1280;
 const INITIAL_HEIGHT: u32 = 720;
 
@@ -31,6 +30,14 @@ impl epi::backend::RepaintSignal for ExampleRepaintSignal {
 /// A simple egui + wgpu + winit based example.
 #[cfg(not(target_arch = "wasm32"))] // TODO support wasm
 fn main() {
+    std::env::set_var("RUST_BACKTRACE", "1");
+    /*std::panic::set_hook(Box::new(|_panic_info| {
+        let backtrace = backtrace::Backtrace::new();
+        //  Do something with backtrace and panic_info.
+        println!("{:?}", backtrace);
+    }));*/
+
+
     let event_loop = winit::event_loop::EventLoopBuilder::<Event>::with_user_event().build();
     let window = winit::window::WindowBuilder::new()
         .with_decorations(true)
@@ -123,16 +130,16 @@ fn main() {
                 // Begin to draw the UI frame.
                 platform.begin_frame();
 
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("encoder"),
+                });
+
                 // Draw the demo application.
-                protos_app.ui(&platform.context(), &device, &mut egui_rpass);
+                protos_app.ui(&platform.context(), &device, &mut encoder, &mut egui_rpass);
 
                 // End the UI frame. We could now handle the output and draw the UI with the backend.
                 let full_output = platform.end_frame(Some(&window));
                 let paint_jobs = platform.context().tessellate(full_output.shapes);
-
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("encoder"),
-                });
 
                 // Upload all resources for the GPU.
                 let screen_descriptor = ScreenDescriptor {
@@ -197,6 +204,10 @@ fn main() {
                 } => control_flow.set_exit(),
                 _ => {}
             },
+            LoopDestroyed => {
+                #[cfg(feature = "persistence")]
+                protos_app.save();
+            }
             _ => (),
         }
     });
