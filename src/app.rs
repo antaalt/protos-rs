@@ -1,7 +1,7 @@
 
 use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}};
 
-use egui::{self, DragValue, Vec2};
+use egui::{self, DragValue, Vec2, TextStyle};
 use egui_node_graph::*;
 
 use crate::gfx;
@@ -31,6 +31,7 @@ pub enum ProtosDataType {
     Scalar, // float
     Vec2,   // float2
     Vec3,   // float3
+    String,
 }
 
 
@@ -50,6 +51,7 @@ pub enum ProtosValueType {
     Scalar { value: f32 },
     Vec2 { value: [f32; 2] },
     Vec3 { value: [f32; 3] },
+    String { value: String },
 }
 
 impl Default for ProtosValueType {
@@ -82,6 +84,13 @@ impl ProtosValueType {
             anyhow::bail!("Invalid cast to scalar")
         }
     }
+    pub fn try_to_string(self) -> anyhow::Result<String> {
+        if let ProtosValueType::String { value } = self {
+            Ok(value)
+        } else {
+            anyhow::bail!("Invalid cast to scalar")
+        }
+    }
 }
 
 /// NodeTemplate is a mechanism to define node templates. It's what the graph
@@ -94,7 +103,8 @@ pub enum ProtosNodeTemplate {
     GraphicPass { handle: Arc<Mutex<gfx::GraphicPass>> }, 
     ComputePass { handle: Arc<Mutex<gfx::ComputePass>> }, 
     Buffer { handle: Arc<Mutex<gfx::Buffer>> }, 
-    Texture { handle: Arc<Mutex<gfx::Texture>> }, 
+    FileTexture { handle: Arc<Mutex<gfx::Texture>> },
+    ResourceTexture { handle: Arc<Mutex<gfx::Texture>> },
     Camera { handle: Arc<Mutex<gfx::Camera>> }, 
     Mesh { handle: Arc<Mutex<gfx::Mesh>> }, 
 }
@@ -108,7 +118,8 @@ impl ProtosNodeTemplate {
             ProtosNodeTemplate::ComputePass{ .. } => true,
             // Cannot
             ProtosNodeTemplate::Buffer{ .. } => false,
-            ProtosNodeTemplate::Texture{ .. } => false,
+            ProtosNodeTemplate::FileTexture{ .. } => false,
+            ProtosNodeTemplate::ResourceTexture{ .. } => false,
             ProtosNodeTemplate::Camera{ .. } => false,
             ProtosNodeTemplate::Mesh{ .. } => false,
         }
@@ -154,6 +165,7 @@ impl DataTypeTrait<ProtosGraphState> for ProtosDataType {
             ProtosDataType::Scalar => egui::Color32::from_rgb(0, 0, 255),
             ProtosDataType::Vec2 => egui::Color32::from_rgb(255, 255, 0),
             ProtosDataType::Vec3 => egui::Color32::from_rgb(0, 255, 255),
+            ProtosDataType::String => egui::Color32::from_rgb(0, 0, 0),
         }
     }
 
@@ -165,6 +177,7 @@ impl DataTypeTrait<ProtosGraphState> for ProtosDataType {
             ProtosDataType::Scalar => Cow::Borrowed("scalar"),
             ProtosDataType::Vec2 => Cow::Borrowed("vec2"),
             ProtosDataType::Vec3 => Cow::Borrowed("vec3"),
+            ProtosDataType::String => Cow::Borrowed("string"),
         }
     }
 }
@@ -179,13 +192,14 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
 
     fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
         Cow::Borrowed(match self {
-            ProtosNodeTemplate::BackbufferPass{ .. } => "New Backbuffer", // TODO: should not be able to create backbuffer...
-            ProtosNodeTemplate::GraphicPass{ .. } => "New graphic pass",
-            ProtosNodeTemplate::ComputePass{ .. } => "New compute pass",
-            ProtosNodeTemplate::Buffer{ .. } => "New buffer",
-            ProtosNodeTemplate::Texture{ .. } => "New texture",
-            ProtosNodeTemplate::Mesh{ .. } => "New mesh",
-            ProtosNodeTemplate::Camera{ .. } => "New Camera",
+            ProtosNodeTemplate::BackbufferPass{ .. } => "Backbuffer",
+            ProtosNodeTemplate::GraphicPass{ .. } => "Graphic pass",
+            ProtosNodeTemplate::ComputePass{ .. } => "Compute pass",
+            ProtosNodeTemplate::Buffer{ .. } => "Buffer",
+            ProtosNodeTemplate::FileTexture{ .. } => "FileTexture",
+            ProtosNodeTemplate::ResourceTexture{ .. } => "ResourceTexture",
+            ProtosNodeTemplate::Mesh{ .. } => "Mesh",
+            ProtosNodeTemplate::Camera{ .. } => "Camera",
         })
     }
 
@@ -257,7 +271,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
                     String::from("Size"),
                     ProtosDataType::Scalar,
                     ProtosValueType::Scalar { value: 0.0 },
-                    InputParamKind::ConnectionOrConstant,
+                    InputParamKind::ConstantOnly,
                     true,
                 );
                 graph.add_input_param(
@@ -265,7 +279,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
                     String::from("Format"),
                     ProtosDataType::Scalar,
                     ProtosValueType::Scalar { value: 0.0 },
-                    InputParamKind::ConnectionOrConstant,
+                    InputParamKind::ConstantOnly,
                     true,
                 );
                 graph.add_output_param(
@@ -274,10 +288,35 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
                     ProtosDataType::Buffer
                 );
             }
-            ProtosNodeTemplate::Texture{ handle: _ } => {
-                input_image(graph, "v1");
-                input_image(graph, "v2");
-                output_texture(graph, "out");
+            ProtosNodeTemplate::ResourceTexture{ handle: _ } => {
+                graph.add_input_param(
+                    node_id,
+                    String::from("Dimensions"),
+                    ProtosDataType::Vec2,
+                    ProtosValueType::Vec2 { value: [100.0, 100.0] },
+                    InputParamKind::ConstantOnly,
+                    true,
+                );
+                graph.add_output_param(
+                    node_id, 
+                    String::from("texture"),
+                    ProtosDataType::Texture
+                );
+            }
+            ProtosNodeTemplate::FileTexture{ handle: _ } => {
+                graph.add_input_param(
+                    node_id,
+                    String::from("Path"),
+                    ProtosDataType::String,
+                    ProtosValueType::String { value: String::from("") },
+                    InputParamKind::ConstantOnly,
+                    true,
+                );
+                graph.add_output_param(
+                    node_id, 
+                    String::from("texture"),
+                    ProtosDataType::Texture
+                );
             }
             ProtosNodeTemplate::Camera{ handle: _ } => {
                 input_image(graph, "v1");
@@ -302,11 +341,12 @@ impl NodeTemplateIter for AllProtosNodeTemplates {
         // will use to display it to the user. Crates like strum can reduce the
         // boilerplate in enumerating all variants of an enum.
         vec![
-            ProtosNodeTemplate::BackbufferPass { handle: Arc::default() }, // TODO: should not need this.
+            ProtosNodeTemplate::BackbufferPass { handle: Arc::default() },
             ProtosNodeTemplate::GraphicPass{ handle: Arc::default() },
             ProtosNodeTemplate::ComputePass{ handle: Arc::default() },
             ProtosNodeTemplate::Buffer{ handle: Arc::default() },
-            ProtosNodeTemplate::Texture{ handle: Arc::default() },
+            ProtosNodeTemplate::FileTexture{ handle: Arc::default() },
+            ProtosNodeTemplate::ResourceTexture{ handle: Arc::default() },
             ProtosNodeTemplate::Camera{ handle: Arc::default() },
             ProtosNodeTemplate::Mesh{ handle: Arc::default() },
         ]
@@ -330,19 +370,20 @@ impl WidgetValueTrait for ProtosValueType {
         match self {
             ProtosValueType::Texture { value } => {
                 ui.label(param_name);
-                ui.horizontal(|ui| {
+                //ui.horizontal(|ui| {
                    // ui.label("x");
                    // ui.add(DragValue::new(&mut value.x));
                     //ui.label("y");
                     //ui.add(DragValue::new(&mut value.y));
-                });
+                //});
             }
             ProtosValueType::Buffer { value } => {
+                ui.label(param_name);
                 // TODO retrieve value here 
-                ui.horizontal(|ui| {
+                //ui.horizontal(|ui| {
                     //ui.label(param_name);
                     //ui.add(DragValue::new(v));
-                });
+                //});
             }
             ProtosValueType::Scalar { value } => {
                 ui.horizontal(|ui| {
@@ -363,6 +404,11 @@ impl WidgetValueTrait for ProtosValueType {
                     ui.add(DragValue::new(&mut value[0]));
                     ui.add(DragValue::new(&mut value[1]));
                     ui.add(DragValue::new(&mut value[2]));
+                });
+            }
+            ProtosValueType::String { value }  => {
+                ui.add(egui::TextEdit::singleline(value));
+                ui.horizontal(|ui| {
                 });
             }
             _  => {
@@ -451,14 +497,11 @@ pub struct ProtosApp {
     runtime_state: ProtosRuntimeState,
 }
 
-#[cfg(feature = "persistence")]
-const PERSISTENCE_KEY: &str = "protos_rs";
-
 type OutputsCache = HashMap<OutputId, ProtosValueType>;
 
 impl ProtosApp {
 
-    pub fn new(cc: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> Self 
+    pub fn new() -> Self 
     {
         let runtime_state = ProtosRuntimeState {
             available_size: Vec2::new(500.0, 500.0),
@@ -511,13 +554,14 @@ impl ProtosApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, cmd : &mut wgpu::CommandEncoder, egui_rpass : &mut egui_wgpu_backend::RenderPass) {
-        let mut compile = false;
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
-                egui::widgets::global_dark_light_mode_switch(ui);
                 ui.menu_button("Project", |ui| {
                     if ui.button("Compile").clicked() {
-                        compile = true;
+                        
+                    }
+                    if ui.button("Save").clicked() {
+                        self.save();
                     }
                 });
             });
@@ -602,7 +646,6 @@ impl ProtosApp {
                 match user_event {
                     ProtosResponse::SetCurrentBackbuffer(node) => {
                         self.user_state.backbuffer_node = Some(node);
-                        compile = true;
                     }
                     ProtosResponse::ClearCurrentBackbuffer => self.user_state.backbuffer_node = None,
                 }
@@ -612,12 +655,24 @@ impl ProtosApp {
         // Should have a RUN button.
         if let Some(node) = self.user_state.backbuffer_node {
             if self.state.graph.nodes.contains_key(node) {
-                //if compile {
-                    // Evaluate & create nodes
-                    self.evaluate_node(device, &self.state.graph, node, &mut HashMap::new());
-                //}
-                // Record node.
-                self.record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
+                // Evaluate & create nodes
+                match self.evaluate_node(device, &self.state.graph, node, &mut HashMap::new()) {
+                    Ok(()) => {
+                        // Record node.
+                        self.record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
+                    }
+                    Err(err) => {
+                        // TODO: somehow display error to user.
+                        //self.user_state.backbuffer_node = None;
+                        ctx.debug_painter().text(
+                            egui::pos2(10.0, 35.0),
+                            egui::Align2::LEFT_TOP,
+                            err.to_string(),
+                            TextStyle::Button.resolve(&ctx.style()),
+                            egui::Color32::WHITE,
+                        );
+                    }
+                }
             } else {
                 self.user_state.backbuffer_node = None;
             }
@@ -640,29 +695,24 @@ impl ProtosApp {
         graph: &ProtosGraph,
         node_id: NodeId,
         outputs_cache: &mut OutputsCache,
-    ) {
+    ) -> anyhow::Result<()> {
         // This will create data. 
         let node = &graph[node_id];
         match &node.user_data.template {
             ProtosNodeTemplate::BackbufferPass{ handle } => {
                 let mut pass = handle.lock().unwrap();
-                let input = self.evaluate_input(device, graph, node_id, "input", outputs_cache);
-                if input.is_ok() {
-                    let s = input.unwrap();
-                    // Check input is valid type.
-                    if let ProtosValueType::Texture { value } = s {
-                        pass.set_origin(value);
-                    } else {
-                        pass.clear_origin();
-                    }
+                let input = self.evaluate_input(device, graph, node_id, "input", outputs_cache)?;
+                // Check input is valid type.
+                if let ProtosValueType::Texture { value } = input {
+                    pass.set_origin(value);
                 } else {
-                    // input not filled.
                     pass.clear_origin();
                 }
-                
                 pass.set_size(self.runtime_state.available_size.x as u32, self.runtime_state.available_size.y as u32);
                 // Will call create if not created already.
                 pass.update_data(device);
+
+                Ok(())
             },
             ProtosNodeTemplate::GraphicPass{ handle } => {
                 // Here we should call all input_xxx, which will update the description of the graphic pass.
@@ -673,19 +723,12 @@ impl ProtosApp {
                 // Input & co should be templated somewhere, trait to get these informations ?
                 for i in 0..1 {
                     //let name = format!("SRV{}", i)
-                    let srv = self.evaluate_input(device, graph, node_id, "SRV0", outputs_cache);
-                    // Check input is used
-                    if srv.is_ok() {
-                        let s = srv.unwrap();
-                        // Check input is valid type.
-                        if let ProtosValueType::Texture { value } = s {
-                            pass.set_shader_resource_view(i, value);
-                        } else {
-                            pass.clear_shader_resource_view(i);
-                        }
+                    let srv = self.evaluate_input(device, graph, node_id, "SRV0", outputs_cache)?;
+                    // Check input is valid type.
+                    if let ProtosValueType::Texture { value } = srv {
+                        pass.set_shader_resource_view(i, value);
                     } else {
-                        // input not filled.
-                        pass.clear_shader_resource_view(i);
+                        anyhow::bail!("Invalid type is not a texture")
                     }
                 }
                 let num_attachment = 1;
@@ -705,10 +748,13 @@ impl ProtosApp {
                     self.populate_output(graph, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(i) }, outputs_cache);
                 }
                 
+                Ok(())
             }
             ProtosNodeTemplate::ComputePass{ handle: _ } => {
                 let a = self.evaluate_input(device, graph, node_id, "A", outputs_cache);
                 self.populate_output(graph, node_id, "out", ProtosValueType::Texture { value: a.unwrap().try_to_texture().unwrap() }, outputs_cache);
+                
+                Ok(())
             }
             ProtosNodeTemplate::Buffer{ handle } => {
                 // Inputs for buffer are mostly data... scalar & co
@@ -718,12 +764,28 @@ impl ProtosApp {
                 let format = self.evaluate_input(device, graph, node_id, "Format", outputs_cache).unwrap().try_to_vec2();
                 let mut buffer = handle.lock().unwrap();
                 buffer.update_data(device);
-                self.populate_output(graph, node_id, "out", ProtosValueType::Buffer { value: Some(handle.clone()) }, outputs_cache);
+                self.populate_output(graph, node_id, "buffer", ProtosValueType::Buffer { value: Some(handle.clone()) }, outputs_cache);
+                
+                Ok(())
             }
-            ProtosNodeTemplate::Texture{ handle: _ } => {
-                let scalar = self.evaluate_input(device, graph, node_id, "v1", outputs_cache);
-                let vector = self.evaluate_input(device, graph, node_id, "v2", outputs_cache);
-                self.populate_output(graph, node_id, "out", ProtosValueType::Texture { value: scalar.unwrap().try_to_texture().unwrap() }, outputs_cache);
+            ProtosNodeTemplate::FileTexture{ handle } => {
+                let path = self.evaluate_input(device, graph, node_id, "Path", outputs_cache)?.try_to_string()?;
+                let mut texture = handle.lock().unwrap();
+                texture.load(path.as_str())?;
+                texture.update_data(device);
+                self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(handle.clone()) }, outputs_cache);
+
+                Ok(())
+            }
+            ProtosNodeTemplate::ResourceTexture{ handle } => {
+                let dimensions = self.evaluate_input(device, graph, node_id, "Dimensions", outputs_cache)?.try_to_vec2()?;
+                let mut texture = handle.lock().unwrap();
+                texture.set_width(dimensions[0] as u32);
+                texture.set_height(dimensions[1] as u32);
+                texture.update_data(device);
+                self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(handle.clone()) }, outputs_cache);
+                
+                Ok(())
             }
             /*ProtosNodeTemplate::Camera{ handle: _ } => {
                 let scalar = evaluate_input(graph, node_id, "v1", outputs_cache);
@@ -800,7 +862,7 @@ impl ProtosApp {
                     pass.record_data(device, cmd);
                 }
             },
-            _ => {} // Not recordable.
+            _ => { assert!(!node.user_data.template.can_be_recorded()) }
         }
     }
 
@@ -838,13 +900,14 @@ impl ProtosApp {
             // This is the first time encountering this node, so we need to
             // recursively evaluate it.
             else {
-                // Calling this will populate the cache
-                self.evaluate_node(device, graph, graph[other_output_id].node, outputs_cache);
-
-                // Now that we know the value is cached, return it
-                Ok(outputs_cache
-                    .get(&other_output_id)
-                    .expect("Cache should be populated").clone())
+                match self.evaluate_node(device, graph, graph[other_output_id].node, outputs_cache) {
+                    Ok(()) => {
+                        Ok(outputs_cache
+                        .get(&other_output_id)
+                        .expect("Cache should be populated").clone())
+                    }
+                    Err(err) => anyhow::bail!("Node failed to compile : {}.", err.to_string())
+                }
             }
         }
         // No existing connection, take the inline value instead.

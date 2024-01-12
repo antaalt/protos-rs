@@ -99,7 +99,7 @@ fn main() {
     //let mut demo_app = egui_demo_lib::DemoWindows::default();
 
     // Create Protos app
-    let mut protos_app = protos_rs::ProtosApp::new(&platform.context(), &device, &mut egui_rpass);
+    let mut protos_app = protos_rs::ProtosApp::new();
 
     let start_time = Instant::now();
     event_loop.run(move |event, _, control_flow| {

@@ -1,4 +1,6 @@
-use image::{GenericImageView};
+use std::fs;
+
+use image::GenericImageView;
 use anyhow::*;
 
 #[derive(Debug)]
@@ -68,6 +70,14 @@ impl Texture {
     }
     pub fn set_height(&mut self, height: u32) {
         self.desc.height = height;
+    }
+    pub fn set_bytes(&mut self, bytes: Vec<u8>) {
+        self.desc.data = bytes;
+    }
+    pub fn load(&mut self, path: &str) -> anyhow::Result<()> {
+        let bytes = fs::read(path)?;
+        self.desc = TextureDescription::from_bytes(bytes.as_slice(), "FileTextureNode", false)?;
+        Ok(())
     }
 
     pub fn update_data(&mut self, device: &wgpu::Device) {
