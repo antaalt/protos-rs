@@ -11,3 +11,4 @@ Cargo.lock
 
 # File storing app state.
 state.json
+user_state.json

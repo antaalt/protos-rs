@@ -460,17 +460,39 @@ impl ProtosApp {
 
     pub fn new(cc: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> Self 
     {
+        let runtime_state = ProtosRuntimeState {
+            available_size: Vec2::new(500.0, 500.0),
+            egui_image_filter: wgpu::FilterMode::Nearest,
+            egui_texture_id: egui::TextureId::default(),
+            dirty_egui_texture: false,
+        };
+        #[cfg(feature = "persistence")]
+        {
+            use std::fs;
+
+            let state_json = fs::read_to_string("state.json");
+            let user_state_json = fs::read_to_string("user_state.json");
+            if state_json.is_ok() && user_state_json.is_ok() {
+                let state = serde_json::from_str(state_json.unwrap().as_str()).unwrap_or_default();
+                let user_state = serde_json::from_str(user_state_json.unwrap().as_str()).unwrap_or_default();
+                Self {
+                    state,
+                    user_state,
+                    runtime_state
+                }
+            } else {
+                Self {
+                    state: ProtosEditorState::default(),
+                    user_state: ProtosGraphState::default(),
+                    runtime_state
+                }
+            }
+        }
+        #[cfg(not(feature = "persistence"))]
         Self {
             state: ProtosEditorState::default(),
-            user_state: ProtosGraphState {
-                backbuffer_node: None,
-            },
-            runtime_state: ProtosRuntimeState {
-                available_size: Vec2::new(500.0, 500.0),
-                egui_image_filter: wgpu::FilterMode::Nearest,
-                egui_texture_id: egui::TextureId::default(),
-                dirty_egui_texture: false,
-            }
+            user_state: ProtosGraphState::default(),
+            runtime_state
         }
     }
 
@@ -480,22 +502,12 @@ impl ProtosApp {
     /// Called by the frame work to save state before shutdown.
     pub fn save(&mut self) {
         use std::fs;
-
-        let json = serde_json::to_string(&self.state).unwrap();
-        fs::write("state.json", json).expect("Unable to write state file");
+        let json_state = serde_json::to_string(&self.state).unwrap();
+        let json_user_state = serde_json::to_string(&self.user_state).unwrap();
+        fs::write("state.json", json_state).expect("Unable to write state file");
+        fs::write("user_state.json", json_user_state).expect("Unable to write user state file");
     }
     
-    #[cfg(feature = "persistence")]
-    /// If the persistence function is enabled,
-    /// Called by the frame work to save state before shutdown.
-    pub fn load(&mut self) {
-        use std::fs;
-
-        let json = fs::read_to_string("state.json");
-        if json.is_ok() {
-            self.state = serde_json::from_str(json.unwrap().as_str()).unwrap();
-        }
-    }
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, cmd : &mut wgpu::CommandEncoder, egui_rpass : &mut egui_wgpu_backend::RenderPass) {
