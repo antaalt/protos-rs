@@ -1,5 +1,6 @@
 
 #[derive(Debug)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct BufferDescription {
 
 }
@@ -8,8 +9,10 @@ pub struct BufferData {
 
 }
 #[derive(Debug)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct Buffer {
     desc: BufferDescription,
+    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
     data: Option<BufferData>,
 }
 

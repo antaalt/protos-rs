@@ -2,6 +2,7 @@ use image::{GenericImageView};
 use anyhow::*;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct TextureDescription {
     data: Vec<u8>,
     width: u32,
@@ -16,8 +17,10 @@ pub struct TextureData {
     pub sampler: wgpu::Sampler,
 }
 #[derive(Debug)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct Texture {
     desc: TextureDescription,
+    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
     data: Option<TextureData>,
 }
 

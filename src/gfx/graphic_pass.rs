@@ -72,6 +72,7 @@ impl Vertex for StaticVertex {
 }
 
 #[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct AttachmentDescription {
     width: u32,
     height: u32,
@@ -93,6 +94,7 @@ impl AttachmentDescription {
     }
 }
 
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct GraphicPassDescription {
     bind_group : Vec<Vec<wgpu::BindGroupLayoutEntry>>,
     render_target_desc: Vec<AttachmentDescription>,
@@ -104,8 +106,10 @@ pub struct GraphicPassData {
     bind_group_layout : Vec<wgpu::BindGroupLayout>,
     render_target: Vec<ResourceHandle<Texture>>,
 }
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct GraphicPass {
     desc: GraphicPassDescription,
+    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
     data: Option<GraphicPassData>,
     dirty: bool,
 }

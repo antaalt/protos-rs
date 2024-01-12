@@ -1,4 +1,5 @@
 
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct ComputePassDescription {
     pub bind_group : Vec<Vec<wgpu::BindGroupLayoutEntry>>,
 }
@@ -7,8 +8,10 @@ pub struct ComputePassData {
     bind_group_layout : Vec<wgpu::BindGroupLayout>
 }
 
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct ComputePass {
     desc: ComputePassDescription,
+    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
     data: Option<ComputePassData>
 }
 

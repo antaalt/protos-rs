@@ -1,12 +1,12 @@
 use std::sync::Arc;
-use std::sync::Mutex;
-use wgpu::{ImageCopyTexture, Extent3d};
 use anyhow::*;
 
 use super::{core::ResourceHandle, Texture};
 
 
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct BackbufferPassDescription {
+    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
     origin : Option<ResourceHandle<Texture>>,
     width: u32,
     height: u32,
@@ -16,8 +16,11 @@ pub struct BackbufferPassData {
     //render_pipeline: wgpu::RenderPipeline,
     //bind_group_layout : Vec<wgpu::BindGroupLayout>
 }
+
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct BackbufferPass {
     desc: BackbufferPassDescription,
+    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
     data: Option<BackbufferPassData>,
     dirty: bool, // true if data does not match description & need update.
 }

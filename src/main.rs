@@ -204,6 +204,10 @@ fn main() {
                 } => control_flow.set_exit(),
                 _ => {}
             },
+            LoopDestroyed => {
+                #[cfg(feature = "persistence")]
+                protos_app.save();
+            }
             _ => (),
         }
     });

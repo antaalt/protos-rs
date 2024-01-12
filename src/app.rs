@@ -1,10 +1,10 @@
 
-use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}, fmt::{self, Formatter}, default};
+use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}};
 
-use egui::{self, DragValue, TextStyle, Vec2};
+use egui::{self, DragValue, Vec2};
 use egui_node_graph::*;
 
-use crate::gfx::{self, ResourceHandle};
+use crate::gfx;
 
 
 // ========= First, define your user data types =============
@@ -132,6 +132,10 @@ pub enum ProtosResponse {
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProtosGraphState {
     backbuffer_node: Option<NodeId>,
+}
+
+#[derive(Default)]
+pub struct ProtosRuntimeState {
     available_size: egui::Vec2,
     egui_image_filter: wgpu::FilterMode,
     egui_texture_id: egui::TextureId,
@@ -437,13 +441,6 @@ impl NodeDataTrait for ProtosNodeData {
 type ProtosGraph = Graph<ProtosNodeData, ProtosDataType, ProtosValueType>;
 type ProtosEditorState = GraphEditorState<ProtosNodeData, ProtosDataType, ProtosValueType, ProtosNodeTemplate, ProtosGraphState>;
 
-struct ProtosRenderTarget {
-    backbuffer : gfx::ResourceHandle<gfx::BackbufferPass>,
-
-    egui: egui::TextureId,
-    size: egui::Vec2,
-}
-
 #[derive(Default)]
 pub struct ProtosApp {
     // The `GraphEditorState` is the top-level object. You "register" all your
@@ -451,6 +448,7 @@ pub struct ProtosApp {
     state: ProtosEditorState,
 
     user_state: ProtosGraphState,
+    runtime_state: ProtosRuntimeState,
 }
 
 #[cfg(feature = "persistence")]
@@ -460,31 +458,19 @@ type OutputsCache = HashMap<OutputId, ProtosValueType>;
 
 impl ProtosApp {
 
-    pub fn new(_cc: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> Self 
+    pub fn new(cc: &egui::Context, device : &wgpu::Device, egui_rpass : &mut egui_wgpu_backend::RenderPass) -> Self 
     {
-        /// If the persistence feature is enabled, Called once before the first frame.
-        /// Load previous app state (if any).
-        #[cfg(feature = "persistence")]
-        {
-            /*let state = cc
-                .storage
-                .and_then(|storage| eframe::get_value(storage, PERSISTENCE_KEY))
-                .unwrap_or_default();
-            Self {
-                state,
-                ProtosGraphState::default(),
-                render_target: texture,
-            }*/
-        }
         Self {
             state: ProtosEditorState::default(),
-            user_state: ProtosGraphState{
+            user_state: ProtosGraphState {
                 backbuffer_node: None,
+            },
+            runtime_state: ProtosRuntimeState {
                 available_size: Vec2::new(500.0, 500.0),
                 egui_image_filter: wgpu::FilterMode::Nearest,
                 egui_texture_id: egui::TextureId::default(),
                 dirty_egui_texture: false,
-            },
+            }
         }
     }
 
@@ -492,8 +478,23 @@ impl ProtosApp {
     #[cfg(feature = "persistence")]
     /// If the persistence function is enabled,
     /// Called by the frame work to save state before shutdown.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, PERSISTENCE_KEY, &self.state);
+    pub fn save(&mut self) {
+        use std::fs;
+
+        let json = serde_json::to_string(&self.state).unwrap();
+        fs::write("state.json", json).expect("Unable to write state file");
+    }
+    
+    #[cfg(feature = "persistence")]
+    /// If the persistence function is enabled,
+    /// Called by the frame work to save state before shutdown.
+    pub fn load(&mut self) {
+        use std::fs;
+
+        let json = fs::read_to_string("state.json");
+        if json.is_ok() {
+            self.state = serde_json::from_str(json.unwrap().as_str()).unwrap();
+        }
     }
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
@@ -515,20 +516,19 @@ impl ProtosApp {
             .resizable(true)
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
-                    egui::widgets::global_dark_light_mode_switch(ui);
                     // Do we really need those ? Texture size exactly match the UI...
                     ui.menu_button("Sampling", |ui| {
                         if ui.button("Nearest").clicked() {
-                            self.user_state.egui_image_filter = wgpu::FilterMode::Nearest;
-                            self.user_state.dirty_egui_texture = true;
+                            self.runtime_state.egui_image_filter = wgpu::FilterMode::Nearest;
+                            self.runtime_state.dirty_egui_texture = true;
                         }
                         if ui.button("Linear").clicked() {
-                            self.user_state.egui_image_filter = wgpu::FilterMode::Linear;
-                            self.user_state.dirty_egui_texture = true;
+                            self.runtime_state.egui_image_filter = wgpu::FilterMode::Linear;
+                            self.runtime_state.dirty_egui_texture = true;
                         }
                     });
                 });
-                self.user_state.available_size = ui.available_size();
+                self.runtime_state.available_size = ui.available_size();
                 if self.user_state.backbuffer_node.is_some() {
                     let node = &self.state.graph[self.user_state.backbuffer_node.unwrap()];
 
@@ -536,28 +536,28 @@ impl ProtosApp {
                         ProtosNodeTemplate::BackbufferPass{ handle } => {
                             let mut pass = handle.lock().unwrap();
                             let render_target_size = egui::Vec2::new(pass.get_width() as f32, pass.get_height() as f32);
-                            if self.user_state.available_size != render_target_size  {
+                            if self.runtime_state.available_size != render_target_size  {
                                 // resize, egui texture id
-                                pass.set_size(self.user_state.available_size.x as u32, self.user_state.available_size.y as u32);
+                                pass.set_size(self.runtime_state.available_size.x as u32, self.runtime_state.available_size.y as u32);
                             }
                             let view_result = pass.get_view_handle();
                             match view_result {
                                 Ok(..) => {
                                     let view = view_result.unwrap();
                                     // Create resource if not created.
-                                    if self.user_state.egui_texture_id == egui::TextureId::default() {
-                                        self.user_state.egui_texture_id = egui_rpass.egui_texture_from_wgpu_texture(device, view, self.user_state.egui_image_filter);
+                                    if self.runtime_state.egui_texture_id == egui::TextureId::default() {
+                                        self.runtime_state.egui_texture_id = egui_rpass.egui_texture_from_wgpu_texture(device, view, self.runtime_state.egui_image_filter);
                                     }
-                                    if self.user_state.dirty_egui_texture {
+                                    if self.runtime_state.dirty_egui_texture {
                                         let update_result = egui_rpass.update_egui_texture_from_wgpu_texture(
                                             device, 
                                             view,
-                                            self.user_state.egui_image_filter, 
-                                            self.user_state.egui_texture_id
+                                            self.runtime_state.egui_image_filter, 
+                                            self.runtime_state.egui_texture_id
                                         );
                                         assert!(update_result.is_ok());
                                     }
-                                    ui.image(self.user_state.egui_texture_id, ui.available_size());
+                                    ui.image(self.runtime_state.egui_texture_id, ui.available_size());
                                 },
                                 Err(e) => {
                                     let message = format!("{}", e);
@@ -648,7 +648,7 @@ impl ProtosApp {
                     pass.clear_origin();
                 }
                 
-                pass.set_size(self.user_state.available_size.x as u32, self.user_state.available_size.y as u32);
+                pass.set_size(self.runtime_state.available_size.x as u32, self.runtime_state.available_size.y as u32);
                 // Will call create if not created already.
                 pass.update_data(device);
             },
@@ -680,7 +680,7 @@ impl ProtosApp {
                 for i in 0..num_attachment {
                     // Should gather these informations from a evaluate_output. -> reach output node, read its data & select informations.
                     let mut desc = gfx::AttachmentDescription::default();
-                    desc.set_size(self.user_state.available_size.x as u32, self.user_state.available_size.y as u32);
+                    desc.set_size(self.runtime_state.available_size.x as u32, self.runtime_state.available_size.y as u32);
                     pass.set_render_target(0, &desc);
                 }
                 
