@@ -72,9 +72,9 @@ impl BackbufferPass {
         return self.data.is_some();
     }
 
-    pub fn update_data(&mut self, device: &wgpu::Device) {
+    pub fn update_data(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         if self.dirty {
-            self.data = Some(BackbufferPassData::new(device, &self.desc));
+            self.data = Some(BackbufferPassData::new(device, queue, &self.desc));
             println!("Backbuffer created.");
             self.dirty = false;
         }
@@ -109,10 +109,10 @@ impl BackbufferPass {
 }
 
 impl BackbufferPassData {
-    pub fn new(device: &wgpu::Device, desc: &BackbufferPassDescription) -> Self {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &BackbufferPassDescription) -> Self {
         let mut texture = Texture::default();
         texture.set_size(desc.width, desc.height);
-        texture.update_data(device);
+        texture.update_data(device, queue);
         Self {
             target: Some(texture),
         }

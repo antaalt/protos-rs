@@ -135,7 +135,7 @@ fn main() {
                 });
 
                 // Draw the demo application.
-                protos_app.ui(&platform.context(), &device, &mut encoder, &mut egui_rpass);
+                protos_app.ui(&platform.context(), &device, &queue, &mut encoder, &mut egui_rpass);
 
                 // End the UI frame. We could now handle the output and draw the UI with the backend.
                 let full_output = platform.end_frame(Some(&window));

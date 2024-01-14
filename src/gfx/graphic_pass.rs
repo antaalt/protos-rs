@@ -139,9 +139,9 @@ impl GraphicPass {
     pub fn has_data(&self) -> bool {
         self.data.is_some()
     }
-    pub fn update_data(&mut self, device : &wgpu::Device) {
+    pub fn update_data(&mut self, device : &wgpu::Device, queue : &wgpu::Queue) {
         if self.dirty {
-            self.data = Some(GraphicPassData::new(device, &self.desc));
+            self.data = Some(GraphicPassData::new(device, queue, &self.desc));
             self.dirty = false;
             println!("Graphic pass created.");
         }
@@ -244,7 +244,7 @@ impl GraphicPass {
     }
 }
 impl GraphicPassData {
-    fn new(device : &wgpu::Device, description : &GraphicPassDescription) -> Self {
+    fn new(device : &wgpu::Device, queue : &wgpu::Queue, description : &GraphicPassDescription) -> Self {
         // Create bind groups.
         let mut bind_group_layout : Vec<wgpu::BindGroupLayout> = vec![];
         for (i, bind_group) in description.bind_group.iter().enumerate() {
@@ -270,7 +270,7 @@ impl GraphicPassData {
             }));
             let mut attachment = Texture::default();
             attachment.set_size(render_target.width, render_target.height);
-            attachment.update_data(device);
+            attachment.update_data(device, queue);
             render_targets.push(Arc::new(Mutex::new(attachment)));
         }
 

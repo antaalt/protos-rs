@@ -553,7 +553,7 @@ impl ProtosApp {
     
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
-    pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, cmd : &mut wgpu::CommandEncoder, egui_rpass : &mut egui_wgpu_backend::RenderPass) {
+    pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, queue : &wgpu::Queue, cmd : &mut wgpu::CommandEncoder, egui_rpass : &mut egui_wgpu_backend::RenderPass) {
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("Project", |ui| {
@@ -656,14 +656,12 @@ impl ProtosApp {
         if let Some(node) = self.user_state.backbuffer_node {
             if self.state.graph.nodes.contains_key(node) {
                 // Evaluate & create nodes
-                match self.evaluate_node(device, &self.state.graph, node, &mut HashMap::new()) {
+                match self.evaluate_node(device, queue, &self.state.graph, node, &mut HashMap::new()) {
                     Ok(()) => {
                         // Record node.
                         self.record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
                     }
                     Err(err) => {
-                        // TODO: somehow display error to user.
-                        //self.user_state.backbuffer_node = None;
                         ctx.debug_painter().text(
                             egui::pos2(10.0, 35.0),
                             egui::Align2::LEFT_TOP,
@@ -692,6 +690,7 @@ impl ProtosApp {
     pub fn evaluate_node(
         &self,
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         graph: &ProtosGraph,
         node_id: NodeId,
         outputs_cache: &mut OutputsCache,
@@ -701,7 +700,7 @@ impl ProtosApp {
         match &node.user_data.template {
             ProtosNodeTemplate::BackbufferPass{ handle } => {
                 let mut pass = handle.lock().unwrap();
-                let input = self.evaluate_input(device, graph, node_id, "input", outputs_cache)?;
+                let input = self.evaluate_input(device, queue, graph, node_id, "input", outputs_cache)?;
                 // Check input is valid type.
                 if let ProtosValueType::Texture { value } = input {
                     pass.set_origin(value);
@@ -710,7 +709,7 @@ impl ProtosApp {
                 }
                 pass.set_size(self.runtime_state.available_size.x as u32, self.runtime_state.available_size.y as u32);
                 // Will call create if not created already.
-                pass.update_data(device);
+                pass.update_data(device, queue);
 
                 Ok(())
             },
@@ -723,7 +722,7 @@ impl ProtosApp {
                 // Input & co should be templated somewhere, trait to get these informations ?
                 for i in 0..1 {
                     //let name = format!("SRV{}", i)
-                    let srv = self.evaluate_input(device, graph, node_id, "SRV0", outputs_cache)?;
+                    let srv = self.evaluate_input(device, queue, graph, node_id, "SRV0", outputs_cache)?;
                     // Check input is valid type.
                     if let ProtosValueType::Texture { value } = srv {
                         pass.set_shader_resource_view(i, value);
@@ -740,7 +739,7 @@ impl ProtosApp {
                 }
                 
                 // Will call create if not created already.
-                pass.update_data(device);
+                pass.update_data(device, queue);
                 
                 for i in 0..num_attachment {
                     // Output graphic pass will populate output. need to ensure data is created already.
@@ -751,7 +750,7 @@ impl ProtosApp {
                 Ok(())
             }
             ProtosNodeTemplate::ComputePass{ handle: _ } => {
-                let a = self.evaluate_input(device, graph, node_id, "A", outputs_cache);
+                let a = self.evaluate_input(device, queue, graph, node_id, "A", outputs_cache);
                 self.populate_output(graph, node_id, "out", ProtosValueType::Texture { value: a.unwrap().try_to_texture().unwrap() }, outputs_cache);
                 
                 Ok(())
@@ -760,8 +759,8 @@ impl ProtosApp {
                 // Inputs for buffer are mostly data... scalar & co
                 // Could have buffer type aswell (camera, custom (script based ?), common data (time & res)...)
                 // Should be custom nodes instead for cleaner UX (only buffer behind the scene).
-                let size = self.evaluate_input(device, graph, node_id, "Size", outputs_cache).unwrap().try_to_scalar();
-                let format = self.evaluate_input(device, graph, node_id, "Format", outputs_cache).unwrap().try_to_vec2();
+                let size = self.evaluate_input(device, queue, graph, node_id, "Size", outputs_cache).unwrap().try_to_scalar();
+                let format = self.evaluate_input(device, queue, graph, node_id, "Format", outputs_cache).unwrap().try_to_vec2();
                 let mut buffer = handle.lock().unwrap();
                 buffer.update_data(device);
                 self.populate_output(graph, node_id, "buffer", ProtosValueType::Buffer { value: Some(handle.clone()) }, outputs_cache);
@@ -769,20 +768,19 @@ impl ProtosApp {
                 Ok(())
             }
             ProtosNodeTemplate::FileTexture{ handle } => {
-                let path = self.evaluate_input(device, graph, node_id, "Path", outputs_cache)?.try_to_string()?;
+                let path = self.evaluate_input(device, queue, graph, node_id, "Path", outputs_cache)?.try_to_string()?;
                 let mut texture = handle.lock().unwrap();
-                texture.load(path.as_str())?;
-                texture.update_data(device);
+                texture.update_data(device, queue);
                 self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(handle.clone()) }, outputs_cache);
 
                 Ok(())
             }
             ProtosNodeTemplate::ResourceTexture{ handle } => {
-                let dimensions = self.evaluate_input(device, graph, node_id, "Dimensions", outputs_cache)?.try_to_vec2()?;
+                let dimensions = self.evaluate_input(device, queue, graph, node_id, "Dimensions", outputs_cache)?.try_to_vec2()?;
                 let mut texture = handle.lock().unwrap();
                 texture.set_width(dimensions[0] as u32);
                 texture.set_height(dimensions[1] as u32);
-                texture.update_data(device);
+                texture.update_data(device, queue);
                 self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(handle.clone()) }, outputs_cache);
                 
                 Ok(())
@@ -883,6 +881,7 @@ impl ProtosApp {
     fn evaluate_input(
         &self,
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         graph: &ProtosGraph,
         node_id: NodeId,
         param_name: &str,
@@ -900,7 +899,7 @@ impl ProtosApp {
             // This is the first time encountering this node, so we need to
             // recursively evaluate it.
             else {
-                match self.evaluate_node(device, graph, graph[other_output_id].node, outputs_cache) {
+                match self.evaluate_node(device, queue, graph, graph[other_output_id].node, outputs_cache) {
                     Ok(()) => {
                         Ok(outputs_cache
                         .get(&other_output_id)

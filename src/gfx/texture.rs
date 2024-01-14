@@ -1,12 +1,25 @@
-use std::fs;
+use std::{fs, path::PathBuf};
 
 use image::GenericImageView;
 use anyhow::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
+enum TextureSource {
+    None,
+    Bytes(Vec<u8>),
+    Path(PathBuf)
+}
+impl Default for TextureSource {
+    fn default() -> Self {
+        TextureSource::None
+    }
+}
+
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct TextureDescription {
-    data: Vec<u8>,
+    source: TextureSource,
     width: u32,
     height: u32,
     label: String,
@@ -24,12 +37,13 @@ pub struct Texture {
     desc: TextureDescription,
     #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
     data: Option<TextureData>,
+    dirty: bool
 }
 
 impl Default for TextureDescription {
     fn default() -> Self {
         Self {
-            data: Vec::new(),
+            source: TextureSource::default(),
             width:0,
             height:0,
             label: String::from(""),
@@ -42,6 +56,7 @@ impl Default for Texture {
         Self {
             desc: TextureDescription::default(),
             data: None,
+            dirty: true, // Not created.
         }
     }
 }
@@ -66,26 +81,33 @@ impl Texture {
         self.set_height(height);
     }
     pub fn set_width(&mut self, width: u32) {
-        self.desc.width = width;
+        if self.desc.width != width {
+            self.desc.width = width;
+            self.dirty = true;
+        }
     }
     pub fn set_height(&mut self, height: u32) {
-        self.desc.height = height;
+        if self.desc.height != height {
+            self.desc.height = height;
+            self.dirty = true;
+        }
     }
     pub fn set_bytes(&mut self, bytes: Vec<u8>) {
-        self.desc.data = bytes;
-    }
-    pub fn load(&mut self, path: &str) -> anyhow::Result<()> {
-        let bytes = fs::read(path)?;
-        self.desc = TextureDescription::from_bytes(bytes.as_slice(), "FileTextureNode", false)?;
-        Ok(())
+        let src = TextureSource::Bytes(bytes);
+        if self.desc.source != src {
+            self.desc.source = src;
+            self.dirty = true;
+        }
     }
 
-    pub fn update_data(&mut self, device: &wgpu::Device) {
-        if self.data.is_some() {
-            self.data = Some(TextureData::new(device, &self.desc))
-        } else {
-            self.data = Some(TextureData::new(device, &self.desc))
+    pub fn update_data(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<()> {
+        if self.data.is_none() || self.dirty {
+            self.dirty = false;
+            let data = TextureData::new(device, &self.desc);
+            data.write_data(device, queue, &self.desc)?;
+            self.data = Some(data);
         }
+        Ok(())
     }
 }
 impl TextureDescription {
@@ -115,10 +137,10 @@ impl TextureDescription {
         srgb: bool,
     ) -> Result<Self> {
         Ok(Self {
-            data: Vec::from(rgba),
+            source: TextureSource::Bytes(Vec::from(rgba)),
             width: dimensions.0,
             height: dimensions.1,
-            label: String::from("UNKNOWN"),
+            label: String::from(if label.is_some() { label.unwrap() } else { "UNKNOWN" }),
             srgb,
         })
     }
@@ -128,7 +150,7 @@ impl TextureDescription {
         let dimensions = (1, 1);
         Self::from_raw_memory(&rgba[..], dimensions, "DefaultBlackTexture".into(), true)
     }
-
+    
     pub fn default_white_texture() -> Result<Self> {
         // TODO cache output.
         let rgba = vec![255, 255, 255, 255];
@@ -162,7 +184,6 @@ impl TextureData {
         } else {
             wgpu::TextureFormat::Rgba8UnormSrgb
         };
-        let texture_view_format = texture_format;
         let texture = device.create_texture(
             &wgpu::TextureDescriptor {
                 label: Some(desc.label.as_str()),
@@ -172,7 +193,6 @@ impl TextureData {
                 dimension: wgpu::TextureDimension::D2,
                 format: texture_format,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                //view_formats: &[texture_view_format],
             }
         );
 
@@ -191,11 +211,33 @@ impl TextureData {
         
         Self { texture, view, sampler }
     }
-    fn write(&self, device: &wgpu::Device, queue: &wgpu::Queue, desc: &TextureDescription)
+
+    fn get_description_from_source(desc : &TextureDescription) -> Result<TextureDescription> {
+        match &desc.source {
+            TextureSource::None => {
+                Ok(desc.clone())
+            }
+            TextureSource::Bytes(bytes) => {
+                assert!((desc.width * desc.height * 4) as usize == bytes.len());
+                Ok(desc.clone())
+            }
+            TextureSource::Path(path) => {
+                let bytes = fs::read(path)?;
+                Ok(TextureDescription::from_bytes(&bytes, "", false)?)
+            }
+        }
+    }
+
+    fn write_data(&self, device: &wgpu::Device, queue: &wgpu::Queue, desc: &TextureDescription) -> Result<()>
     {
+        // Check if we have a source before writing
+        if let TextureSource::None = desc.source {
+            return Ok(());
+        }
+        let desc_from_source = Self::get_description_from_source(desc)?;
         let size = wgpu::Extent3d {
-            width: desc.width,
-            height: desc.height,
+            width: desc_from_source.width,
+            height: desc_from_source.height,
             depth_or_array_layers: 1,
         };
         queue.write_texture(
@@ -205,7 +247,10 @@ impl TextureData {
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
-            desc.data.as_ref(),
+            match &desc_from_source.source {
+                TextureSource::Bytes(bytes) => bytes.as_ref(),
+                _ => unreachable!("Should not reach here")
+            },
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: std::num::NonZeroU32::new(4 * desc.width),
@@ -213,6 +258,6 @@ impl TextureData {
             },
             size,
         );
-    
+        Ok(())
     }
 }
