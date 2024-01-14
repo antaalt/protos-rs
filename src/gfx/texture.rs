@@ -103,8 +103,9 @@ impl Texture {
     pub fn update_data(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<()> {
         if self.data.is_none() || self.dirty {
             self.dirty = false;
-            let data = TextureData::new(device, &self.desc);
-            data.write_data(device, queue, &self.desc)?;
+            let desc_from_source = TextureData::get_description_from_source(&self.desc)?;
+            let data = TextureData::new(device, &desc_from_source);
+            data.write_data(device, queue, &desc_from_source)?;
             self.data = Some(data);
         }
         Ok(())

@@ -112,7 +112,7 @@ impl BackbufferPassData {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &BackbufferPassDescription) -> Self {
         let mut texture = Texture::default();
         texture.set_size(desc.width, desc.height);
-        texture.update_data(device, queue);
+        texture.update_data(device, queue).expect("Should not fail to create this texture.");
         Self {
             target: Some(texture),
         }

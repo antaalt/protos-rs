@@ -621,7 +621,7 @@ impl ProtosApp {
                                 }
                             }
                         }
-                        _ => panic!("Backbuffer node is node a backbuffer pass...")
+                        _ => unreachable!("Backbuffer node is node a backbuffer pass...")
                     }
                     
                 } else {
@@ -770,7 +770,8 @@ impl ProtosApp {
             ProtosNodeTemplate::FileTexture{ handle } => {
                 let path = self.evaluate_input(device, queue, graph, node_id, "Path", outputs_cache)?.try_to_string()?;
                 let mut texture = handle.lock().unwrap();
-                texture.update_data(device, queue);
+                //texture.set_path();
+                texture.update_data(device, queue)?;
                 self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(handle.clone()) }, outputs_cache);
 
                 Ok(())
@@ -780,7 +781,7 @@ impl ProtosApp {
                 let mut texture = handle.lock().unwrap();
                 texture.set_width(dimensions[0] as u32);
                 texture.set_height(dimensions[1] as u32);
-                texture.update_data(device, queue);
+                texture.update_data(device, queue)?;
                 self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(handle.clone()) }, outputs_cache);
                 
                 Ok(())

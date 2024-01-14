@@ -270,7 +270,7 @@ impl GraphicPassData {
             }));
             let mut attachment = Texture::default();
             attachment.set_size(render_target.width, render_target.height);
-            attachment.update_data(device, queue);
+            attachment.update_data(device, queue).expect("Should not fail here");
             render_targets.push(Arc::new(Mutex::new(attachment)));
         }
 
