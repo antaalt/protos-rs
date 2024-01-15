@@ -1,6 +1,11 @@
 mod core;
 mod data_type;
 mod node;
+mod node_buffer;
+mod node_texture_file;
+mod node_texture_resource;
+mod node_graphic_pass;
+mod node_backbuffer_pass;
 mod value;
 mod graph;
 mod response;
@@ -20,8 +25,3 @@ pub use self::value::ProtosValueType;
 pub use self::graph::ProtosGraphState;
 
 pub use self::response::ProtosResponse;
-
-// we have :
-// - data type which described connections
-// - value type which hold content
-// - template type -> Node

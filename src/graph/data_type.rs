@@ -5,9 +5,6 @@ use egui_node_graph::DataTypeTrait;
 use super::ProtosGraphState;
 
 
-/// `DataType`s are what defines the possible range of connections when
-/// attaching two ports together. The graph UI will make sure to not allow
-/// attaching incompatible datatypes.
 #[derive(PartialEq, Eq)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosDataType {
@@ -22,9 +19,6 @@ pub enum ProtosDataType {
     String,
 }
 
-// =========== Then, you need to implement some traits ============
-
-// A trait for the data types, to tell the library how to display them
 impl DataTypeTrait<ProtosGraphState> for ProtosDataType {
     fn data_type_color(&self, _user_state: &mut ProtosGraphState) -> egui::Color32 {
         match self {

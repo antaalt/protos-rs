@@ -1,10 +1,9 @@
 
-use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}};
+use std::collections::HashMap;
 
-use egui::{self, DragValue, Vec2, TextStyle};
+use egui::{self, Vec2, TextStyle};
 use egui_node_graph::*;
 
-use crate::gfx;
 use crate::graph::*;
 
 
