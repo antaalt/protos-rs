@@ -8,11 +8,11 @@ use crate::gfx;
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct ComputePassNode {
-    handle: gfx::ComputePass
+    handle: gfx::ResourceHandle<gfx::ComputePass>
 }
 
 impl ComputePassNode {
-    pub fn new(handle: gfx::ComputePass) -> Self {
+    pub fn new(handle: gfx::ResourceHandle<gfx::ComputePass>) -> Self {
         Self {
             handle
         }

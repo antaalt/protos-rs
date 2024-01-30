@@ -8,11 +8,11 @@ use crate::gfx;
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct CameraNode {
-    handle: gfx::Camera
+    handle: gfx::ResourceHandle<gfx::Camera>
 }
 
 impl CameraNode {
-    pub fn new(handle: gfx::Camera) -> Self {
+    pub fn new(handle: gfx::ResourceHandle<gfx::Camera>) -> Self {
         Self {
             handle
         }

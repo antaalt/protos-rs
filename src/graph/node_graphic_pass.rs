@@ -8,11 +8,11 @@ use crate::gfx;
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct GraphicPassNode {
-    handle: gfx::GraphicPass
+    handle: gfx::ResourceHandle<gfx::GraphicPass>
 }
 
 impl GraphicPassNode {
-    pub fn new(handle: gfx::GraphicPass) -> Self {
+    pub fn new(handle: gfx::ResourceHandle<gfx::GraphicPass>) -> Self {
         Self {
             handle
         }
@@ -50,7 +50,7 @@ impl ProtosNode for GraphicPassNode {
         // We can then update or not the pipeline with given data.
         // For recording command list, we will need something similar just running for graphic pass & compute pass.
 
-        let mut pass = self.handle;
+        let mut pass = self.handle.lock().unwrap();
         // Input & co should be templated somewhere, trait to get these informations ?
         for i in 0..1 {
             //let name = format!("SRV{}", i)
@@ -89,7 +89,7 @@ impl ProtosNode for GraphicPassNode {
         node_id: NodeId,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let pass = self.handle;
+        let pass = self.handle.lock().unwrap();
         if pass.has_data() {
             // TODO: for loop
             record_input(device, cmd, graph, node_id, "SRV0", outputs_cache);

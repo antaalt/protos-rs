@@ -8,11 +8,11 @@ use crate::gfx;
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct MeshNode {
-    mesh: gfx::Mesh
+    mesh: gfx::ResourceHandle<gfx::Mesh>
 }
 
 impl MeshNode {
-    pub fn new(mesh: gfx::Mesh) -> Self {
+    pub fn new(mesh: gfx::ResourceHandle<gfx::Mesh>) -> Self {
         Self {
             mesh
         }

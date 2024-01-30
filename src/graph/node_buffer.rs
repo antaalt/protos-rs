@@ -8,11 +8,11 @@ use crate::gfx;
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct BufferNode {
-    handle: gfx::Buffer
+    handle: gfx::ResourceHandle<gfx::Buffer>
 }
 
 impl BufferNode {
-    pub fn new(handle: gfx::Buffer) -> Self {
+    pub fn new(handle: gfx::ResourceHandle<gfx::Buffer>) -> Self {
         Self {
             handle
         }
@@ -57,10 +57,10 @@ impl ProtosNode for BufferNode {
     ) -> anyhow::Result<()> {
         let size = evaluate_input(device, queue, graph, node_id, available_size, "Size", outputs_cache).unwrap().try_to_scalar();
         let format = evaluate_input(device, queue, graph, node_id, available_size, "Format", outputs_cache).unwrap().try_to_vec2();
-        let mut buffer = self.handle;
+        let mut buffer = self.handle.lock().unwrap();
         //buffer.set_size();
         //buffer.set_format();
-        buffer.update_data(device, queue);
+        buffer.update_data(device, queue)?;
         populate_output(graph, node_id, "buffer", ProtosValueType::Buffer { value: Some(self.handle.clone()) }, outputs_cache);
         
         Ok(())

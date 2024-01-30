@@ -8,11 +8,11 @@ use crate::gfx;
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct BackbufferPassNode {
-    handle: gfx::BackbufferPass
+    pub handle: gfx::ResourceHandle<gfx::BackbufferPass>
 }
 
 impl BackbufferPassNode {
-    pub fn new(handle: gfx::BackbufferPass) -> Self {
+    pub fn new(handle: gfx::ResourceHandle<gfx::BackbufferPass>) -> Self {
         Self {
             handle
         }
@@ -42,7 +42,7 @@ impl ProtosNode for BackbufferPassNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let mut pass = self.handle;
+        let mut pass = self.handle.lock().unwrap();
         let input = evaluate_input(device, queue, graph, node_id, available_size, "input", outputs_cache)?;
         // Check input is valid type.
         if let ProtosValueType::Texture { value } = input {
@@ -52,7 +52,7 @@ impl ProtosNode for BackbufferPassNode {
         }
         pass.set_size(available_size.x as u32, available_size.y as u32);
         // Will call create if not created already.
-        pass.update_data(device, queue);
+        pass.update_data(device, queue)?;
 
         Ok(())
     }
@@ -64,7 +64,7 @@ impl ProtosNode for BackbufferPassNode {
         node_id: NodeId,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let pass = self.handle;
+        let pass = self.handle.lock().unwrap();
         if pass.has_data() {
             record_input(device, cmd, graph, node_id, "input", outputs_cache);
             pass.record_data(device, cmd);

@@ -8,11 +8,11 @@ use crate::gfx;
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct TextureResourceNode {
-    handle: gfx::Texture
+    handle: gfx::ResourceHandle<gfx::Texture>
 }
 
 impl TextureResourceNode {
-    pub fn new(handle: gfx::Texture) -> Self {
+    pub fn new(handle: gfx::ResourceHandle<gfx::Texture>) -> Self {
         Self {
             handle
         }
@@ -48,7 +48,7 @@ impl ProtosNode for TextureResourceNode {
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
         let dimensions = evaluate_input(device, queue, graph, node_id, available_size, "Dimensions", outputs_cache)?.try_to_vec2()?;
-        let mut texture = self.handle;
+        let mut texture = self.handle.lock().unwrap();
         texture.set_width(dimensions[0] as u32);
         texture.set_height(dimensions[1] as u32);
         texture.update_data(device, queue)?;

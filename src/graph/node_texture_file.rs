@@ -8,11 +8,11 @@ use crate::gfx;
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct TextureFileNode {
-    handle: gfx::Texture
+    handle: gfx::ResourceHandle<gfx::Texture>
 }
 
 impl TextureFileNode {
-    pub fn new(handle: gfx::Texture) -> Self {
+    pub fn new(handle: gfx::ResourceHandle<gfx::Texture>) -> Self {
         Self {
             handle
         }
@@ -48,7 +48,7 @@ impl ProtosNode for TextureFileNode {
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
         let path = evaluate_input(device, queue, graph, node_id, available_size, "Path", outputs_cache)?.try_to_string()?;
-        let mut texture = self.handle;
+        let mut texture = self.handle.lock().unwrap();
         //texture.set_path();
         texture.update_data(device, queue)?;
         populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(self.handle.clone()) }, outputs_cache);

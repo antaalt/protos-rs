@@ -27,8 +27,10 @@ pub trait ProtosNode {
         outputs_cache: &mut OutputsCache) -> anyhow::Result<()>;
 }
 
+
 // TODO:ProtosNode should be a node handle instead for simplification...
-pub type NodeHandle<Type: ProtosNode> = Arc<Mutex<Type>>;
+// with a trait. but every node need a custom impl...
+pub type NodeHandle<Type> = Arc<Mutex<Type>>;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
@@ -47,6 +49,13 @@ impl ProtosNodeTemplate {
     pub fn get_node(&self) -> Box<NodeHandle<dyn ProtosNode>> {
         match self {
             ProtosNodeTemplate::BackbufferPass(handle) => { Box::new(handle.clone()) }
+            ProtosNodeTemplate::GraphicPass(handle) => { Box::new(handle.clone()) }
+            ProtosNodeTemplate::ComputePass(handle) => { Box::new(handle.clone()) }
+            ProtosNodeTemplate::FileTexture(handle) => { Box::new(handle.clone()) }
+            ProtosNodeTemplate::ResourceTexture(handle) => { Box::new(handle.clone()) }
+            ProtosNodeTemplate::Buffer(handle) => { Box::new(handle.clone()) }
+            ProtosNodeTemplate::Camera(handle) => { Box::new(handle.clone()) }
+            ProtosNodeTemplate::Mesh(handle) => { Box::new(handle.clone()) }
             _ => { unimplemented!("Missing node implementation"); }
         }
     }
@@ -63,7 +72,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
     fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
         let locked_node = self.get_node();
         let node = locked_node.lock().unwrap();
-        Cow::Borrowed(node.get_name())
+        Cow::Owned(node.get_name().to_owned())
     }
 
     fn node_graph_label(&self, user_state: &mut Self::UserState) -> String {
@@ -205,7 +214,7 @@ pub fn record_input(
         // The value was already computed due to the evaluation of some other
         // node. We simply return value from the cache.
         if let Some(other_value) = outputs_cache.get(&other_output_id) {
-            
+            let _ = other_value;
         }
         // This is the first time encountering this node, so we need to
         // recursively evaluate it.
@@ -226,7 +235,7 @@ pub fn record_node(
     let locked_node = graph[node_id].user_data.template.get_node();
     let node = locked_node.lock().unwrap();
     // TODO: can be recorded ?
-    node.record(device, cmd, graph, node_id, outputs_cache);
+    node.record(device, cmd, graph, node_id, outputs_cache).unwrap();
 }
 
 // Simply fill output with a value.
