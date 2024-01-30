@@ -44,6 +44,7 @@ impl ResourceDescTrait for TextureDescription {
 
 impl ResourceDataTrait<TextureDescription> for TextureData {
     fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &TextureDescription) -> anyhow::Result<Self> {
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
         let desc_from_src : TextureDescription = match &desc.source {
             TextureSource::None => {
                 desc.clone()
@@ -91,41 +92,49 @@ impl ResourceDataTrait<TextureDescription> for TextureData {
                 ..Default::default()
             }
         );
-        if let TextureSource::None = desc.source {
-            Ok(Self {
-                texture,
-                view,
-                sampler,
-            })
+        // TODO: should handle async
+        let validation = pollster::block_on(device.pop_error_scope()).and_then(|err| {
+            Some(err)
+        });
+        if validation.is_some() {
+            anyhow::bail!(validation.unwrap().to_string())
         } else {
-            let size = wgpu::Extent3d {
-                width: desc_from_src.width,
-                height: desc_from_src.height,
-                depth_or_array_layers: 1,
-            };
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    aspect: wgpu::TextureAspect::All,
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                },
-                match &desc_from_src.source {
-                    TextureSource::Bytes(bytes) => bytes.as_ref(),
-                    _ => unreachable!("Should not reach here")
-                },
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: std::num::NonZeroU32::new(4 * desc.width),
-                    rows_per_image: std::num::NonZeroU32::new(desc.height),
-                },
-                size,
-            );
-            Ok(Self {
-                texture,
-                view,
-                sampler,
-            })
+            if let TextureSource::None = desc.source {
+                Ok(Self {
+                    texture,
+                    view,
+                    sampler,
+                })
+            } else {
+                let size = wgpu::Extent3d {
+                    width: desc_from_src.width,
+                    height: desc_from_src.height,
+                    depth_or_array_layers: 1,
+                };
+                queue.write_texture(
+                    wgpu::ImageCopyTexture {
+                        aspect: wgpu::TextureAspect::All,
+                        texture: &texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                    },
+                    match &desc_from_src.source {
+                        TextureSource::Bytes(bytes) => bytes.as_ref(),
+                        _ => unreachable!("Should not reach here")
+                    },
+                    wgpu::ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: std::num::NonZeroU32::new(4 * desc_from_src.width),
+                        rows_per_image: std::num::NonZeroU32::new(desc_from_src.height),
+                    },
+                    size,
+                );
+                Ok(Self {
+                    texture,
+                    view,
+                    sampler,
+                })
+            }
         }
     }
 }
@@ -158,6 +167,13 @@ impl Texture {
     pub fn set_height(&mut self, height: u32) {
         if self.desc.height != height {
             self.desc.height = height;
+            self.dirty = true;
+        }
+    }
+    pub fn set_path(&mut self, path: PathBuf) {
+        let src = TextureSource::Path(path);
+        if self.desc.source != src {
+            self.desc.source = src;
             self.dirty = true;
         }
     }

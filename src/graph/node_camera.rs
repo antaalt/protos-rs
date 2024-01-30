@@ -11,14 +11,6 @@ pub struct CameraNode {
     handle: gfx::ResourceHandle<gfx::Camera>
 }
 
-impl CameraNode {
-    pub fn new(handle: gfx::ResourceHandle<gfx::Camera>) -> Self {
-        Self {
-            handle
-        }
-    }
-}
-
 impl ProtosNode for CameraNode {
     fn get_name(&self) -> &str {
         "Camera"

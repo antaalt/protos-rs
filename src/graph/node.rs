@@ -38,8 +38,7 @@ pub trait ProtosNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache,
     ) -> anyhow::Result<()> {
-        //let locked_node = graph[node_id].user_data.template.get_node();
-        //let node = locked_node.lock().unwrap();
+        println!("Evaluating node {:?} of type {}", node_id, self.get_name());
         self.evaluate(device, queue, graph, node_id, available_size, outputs_cache)
     }
 
@@ -52,7 +51,7 @@ pub trait ProtosNode {
         node_id: NodeId,
         param_name: &str,
         outputs_cache: &mut OutputsCache,
-    ) {
+    ) -> anyhow::Result<()> {
         let input_id = graph[node_id].get_input(param_name).unwrap();
 
         // The output of another node is connected.
@@ -61,14 +60,13 @@ pub trait ProtosNode {
             // node. We simply return value from the cache.
             if let Some(other_value) = outputs_cache.get(&other_output_id) {
                 let _ = other_value;
-            }
-            // This is the first time encountering this node, so we need to
-            // recursively evaluate it.
-            else {
-                // Calling this will populate the cache
-                self.record_node(device, cmd, graph, graph[other_output_id].node, outputs_cache);
+            } else {
+                // First time in this node, recurse it.
+                let input_node = graph[graph[other_output_id].node].user_data.template.get_node();
+                return input_node.record_node(device, cmd, graph, graph[other_output_id].node, outputs_cache);
             }
         }
+        Ok(())
     }
 
     fn record_node(
@@ -78,9 +76,9 @@ pub trait ProtosNode {
         graph: &ProtosGraph,
         node_id: NodeId,
         outputs_cache: &mut OutputsCache,
-    ) {
+    ) -> anyhow::Result<()> {
         // TODO: can be recorded ?
-        self.record(device, cmd, graph, node_id, outputs_cache).unwrap();
+        self.record(device, cmd, graph, node_id, outputs_cache)
     }
 
     // Simply fill output with a value.
@@ -119,7 +117,8 @@ pub trait ProtosNode {
             // This is the first time encountering this node, so we need to
             // recursively evaluate it.
             else {
-                match self.evaluate_node(device, queue, graph, graph[other_output_id].node, available_size, outputs_cache) {
+                let input_node = graph[graph[other_output_id].node].user_data.template.get_node();
+                match input_node.evaluate_node(device, queue, graph, graph[other_output_id].node, available_size, outputs_cache) {
                     Ok(()) => {
                         Ok(outputs_cache
                         .get(&other_output_id)
@@ -199,6 +198,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
         _user_state: &mut Self::UserState,
         node_id: NodeId,
     ) {
+        println!("Building node : {}", self.get_node().get_name());
         let node = self.get_node();
         node.build(graph, node_id);
     }

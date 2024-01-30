@@ -1,3 +1,5 @@
+use std::{path::PathBuf, str::FromStr};
+
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
@@ -41,7 +43,7 @@ impl ProtosNode for TextureFileNode {
     ) -> anyhow::Result<()> {
         let path = self.evaluate_input(device, queue, graph, node_id, available_size, "Path", outputs_cache)?.try_to_string()?;
         let mut texture = self.handle.lock().unwrap();
-        //texture.set_path();
+        texture.set_path(PathBuf::from_str(path.as_str())?);
         texture.update_data(device, queue)?;
         self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(self.handle.clone()) }, outputs_cache);
 

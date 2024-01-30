@@ -27,7 +27,6 @@ impl ResourceDataTrait<BackbufferPassDescription> for BackbufferPassData {
         let mut texture = Texture::default();
         texture.set_size(desc.width, desc.height);
         texture.update_data(device, queue)?;
-        println!("Backbuffer created.");
         Ok(Self {
             target: Some(texture),
         })
@@ -47,9 +46,6 @@ impl BackbufferPass {
             self.desc.origin = origin;
             self.dirty = true;
         }
-    }
-    pub fn clear_origin(&mut self) {
-        self.set_origin(None);
     }
     pub fn set_size(&mut self, width: u32, height: u32) {
         if self.desc.width != width || self.desc.height != height {

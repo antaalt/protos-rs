@@ -1,4 +1,3 @@
-use std::rc::Rc;
 
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
@@ -42,7 +41,7 @@ impl ProtosNode for BackbufferPassNode {
         if let ProtosValueType::Texture { value } = input {
             pass.set_origin(value);
         } else {
-            pass.clear_origin();
+            anyhow::bail!("Invalid render target in backbuffer")
         }
         pass.set_size(available_size.x as u32, available_size.y as u32);
         // Will call create if not created already.
@@ -60,7 +59,7 @@ impl ProtosNode for BackbufferPassNode {
     ) -> anyhow::Result<()> {
         let pass = self.handle.lock().unwrap();
         if pass.has_data() {
-            self.record_input(device, cmd, graph, node_id, "input", outputs_cache);
+            self.record_input(device, cmd, graph, node_id, "input", outputs_cache)?;
             pass.record_data(device, cmd);
         }
         Ok(())

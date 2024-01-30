@@ -84,7 +84,7 @@ impl ProtosNode for GraphicPassNode {
         let pass = self.handle.lock().unwrap();
         if pass.has_data() {
             // TODO: for loop
-            self.record_input(device, cmd, graph, node_id, "SRV0", outputs_cache);
+            self.record_input(device, cmd, graph, node_id, "SRV0", outputs_cache)?;
             pass.record_data(device, cmd);
             Ok(()) // TODO: propagate
         } else {

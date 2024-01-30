@@ -181,17 +181,28 @@ impl ProtosApp {
         }
         // Here we must create all resources & cache it & create command buffers...
         // Should have a RUN button.
-        if let Some(node) = self.user_state.backbuffer_node {
-            if self.state.graph.nodes.contains_key(node) {
+        if let Some(node_id) = self.user_state.backbuffer_node {
+            if self.state.graph.nodes.contains_key(node_id) {
                 // Evaluate & create nodes
-                let backbuffer_node = match &self.state.graph.nodes[node].user_data.template {
+                let backbuffer_node = match &self.state.graph.nodes[node_id].user_data.template {
                     ProtosNodeTemplate::BackbufferPass(node_handle) => node_handle,
                     _ => unreachable!("to backbuffer or not to backbuffer ?")
                 };
-                match backbuffer_node.evaluate_node(device, queue, &self.state.graph, node, self.runtime_state.available_size, &mut HashMap::new()) {
+                match backbuffer_node.evaluate_node(device, queue, &self.state.graph, node_id, self.runtime_state.available_size, &mut HashMap::new()) {
                     Ok(()) => {
                         // Record node.
-                        backbuffer_node.record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
+                        match backbuffer_node.record_node(device, cmd, &self.state.graph, node_id, &mut HashMap::new()) {
+                            Ok(()) => {}
+                            Err(err) => {
+                                ctx.debug_painter().text(
+                                    egui::pos2(10.0, 55.0),
+                                    egui::Align2::LEFT_TOP,
+                                    err.to_string(),
+                                    TextStyle::Button.resolve(&ctx.style()),
+                                    egui::Color32::WHITE,
+                                );
+                            }
+                        }
                     }
                     Err(err) => {
                         ctx.debug_painter().text(
