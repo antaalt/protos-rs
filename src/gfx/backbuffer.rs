@@ -1,28 +1,37 @@
 use std::sync::Arc;
-use anyhow::*;
 
-use super::{core::ResourceHandle, Texture};
+use super::{resource::{Resource, ResourceDataTrait, ResourceDescTrait,}, Texture, ResourceHandle};
 
 
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct BackbufferPassDescription {
-    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
-    origin : Option<ResourceHandle<Texture>>,
+    #[cfg_attr(feature = "persistence", serde(skip))]
+    origin : Option<ResourceHandle<Texture>>, // TODO: serialize this ?
     width: u32,
     height: u32,
 }
+#[derive(Debug, Default)]
 pub struct BackbufferPassData {
     target : Option<Texture>,
-    //render_pipeline: wgpu::RenderPipeline,
-    //bind_group_layout : Vec<wgpu::BindGroupLayout>
 }
 
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-pub struct BackbufferPass {
-    desc: BackbufferPassDescription,
-    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
-    data: Option<BackbufferPassData>,
-    dirty: bool, // true if data does not match description & need update.
+pub type BackbufferPass = Resource<BackbufferPassDescription, BackbufferPassData>;
+
+impl ResourceDescTrait for BackbufferPassDescription {
+    
+}
+
+impl ResourceDataTrait<BackbufferPassDescription> for BackbufferPassData {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &BackbufferPassDescription) -> anyhow::Result<Self> {
+        let mut texture = Texture::default();
+        texture.set_size(desc.width, desc.height);
+        texture.update_data(device, queue)?;
+        println!("Backbuffer created.");
+        Ok(Self {
+            target: Some(texture),
+        })
+    }
 }
 
 impl BackbufferPass {
@@ -62,23 +71,16 @@ impl BackbufferPass {
                 let dd = d.target.as_ref().unwrap();
                 dd.get_view_handle()
             } else {
-                Err(anyhow!("No data"))
+                anyhow::bail!("No data")
             }
         } else {
-            Err(anyhow!("No data"))
+            anyhow::bail!("No data")
         }
     }
     pub fn has_data(&self) -> bool {
         return self.data.is_some();
     }
-
-    pub fn update_data(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        if self.dirty {
-            self.data = Some(BackbufferPassData::new(device, queue, &self.desc));
-            println!("Backbuffer created.");
-            self.dirty = false;
-        }
-    }
+    // TODO: move this in node_backbuffer
     pub fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder) {
         if self.desc.origin.is_some() {
             let origin_locked = self.desc.origin.as_ref().unwrap().lock();
@@ -104,36 +106,6 @@ impl BackbufferPass {
                 height: self.desc.height,
                 depth_or_array_layers:1,
             });
-        }
-    }
-}
-
-impl BackbufferPassData {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &BackbufferPassDescription) -> Self {
-        let mut texture = Texture::default();
-        texture.set_size(desc.width, desc.height);
-        texture.update_data(device, queue).expect("Should not fail to create this texture.");
-        Self {
-            target: Some(texture),
-        }
-    }
-}
-
-impl Default for BackbufferPassDescription {
-    fn default() -> Self {
-        Self {
-            origin: None,
-            width: 0,
-            height: 0,
-        }
-    }
-}
-impl Default for BackbufferPass {
-    fn default() -> Self {
-        Self {
-            desc: BackbufferPassDescription::default(),
-            data: None,
-            dirty: true, // data is None.
         }
     }
 }

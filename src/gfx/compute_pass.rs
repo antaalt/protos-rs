@@ -1,4 +1,7 @@
+use super::resource::{ResourceDataTrait, ResourceDescTrait};
 
+
+#[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct ComputePassDescription {
     pub bind_group : Vec<Vec<wgpu::BindGroupLayoutEntry>>,
@@ -8,33 +11,21 @@ pub struct ComputePassData {
     bind_group_layout : Vec<wgpu::BindGroupLayout>
 }
 
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-pub struct ComputePass {
-    desc: ComputePassDescription,
-    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
-    data: Option<ComputePassData>
+pub type ComputePass = Resource<ComputePassDescription, ComputePassData>;
+
+impl ResourceDescTrait for ComputePassDescription {
+    
 }
 
-impl Default for ComputePassDescription {
-    fn default() -> Self {
-        Self { bind_group: Vec::new() }
-    }
-}
-impl Default for ComputePass {
-    fn default() -> Self {
-        Self {
-            desc: ComputePassDescription::default(),
-            data: None,
-        }
+impl ResourceDataTrait<ComputePassDescription> for ComputePassData {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &ComputePassDescription) -> anyhow::Result<Self> {
+        anyhow::bail!("Nothing to do here");
     }
 }
 
 impl ComputePass {
     pub fn has_data(&self) -> bool {
         return self.data.is_some();
-    }
-    pub fn update_data(&mut self, device: &wgpu::Device) {
-        let _ = device;
     }
     pub fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder) {
         let _ = device;
