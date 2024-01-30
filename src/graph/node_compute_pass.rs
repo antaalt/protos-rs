@@ -1,37 +1,41 @@
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, evaluate_input, OutputsCache, record_input}};
+use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, OutputsCache, populate_output, record_input}};
 
 use crate::gfx;
 
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-pub struct BackbufferPassNode {
-    handle: gfx::BackbufferPass
+pub struct ComputePassNode {
+    handle: gfx::ComputePass
 }
 
-impl BackbufferPassNode {
-    pub fn new(handle: gfx::BackbufferPass) -> Self {
+impl ComputePassNode {
+    pub fn new(handle: gfx::ComputePass) -> Self {
         Self {
             handle
         }
     }
 }
 
-impl ProtosNode for BackbufferPassNode {
+impl ProtosNode for ComputePassNode {
     fn get_name(&self) -> &str {
-        "Backbuffer pass"
+        "Compute pass"
     }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
+        
+        // TODO for loop
         graph.add_input_param(
             node_id,
-            "input".to_string(),
+            "SRV0".to_string(),
             ProtosDataType::Texture,
             ProtosValueType::Texture { value: None },
             InputParamKind::ConnectionOnly,
             true,
         );
+        // TODO for loop
+        graph.add_output_param(node_id, "RT0".to_string(), ProtosDataType::Texture);
     }
     fn evaluate(
         &self, 
@@ -42,18 +46,7 @@ impl ProtosNode for BackbufferPassNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let mut pass = self.handle;
-        let input = evaluate_input(device, queue, graph, node_id, available_size, "input", outputs_cache)?;
-        // Check input is valid type.
-        if let ProtosValueType::Texture { value } = input {
-            pass.set_origin(value);
-        } else {
-            pass.clear_origin();
-        }
-        pass.set_size(available_size.x as u32, available_size.y as u32);
-        // Will call create if not created already.
-        pass.update_data(device, queue);
-
+        
         Ok(())
     }
     fn record(
@@ -64,11 +57,6 @@ impl ProtosNode for BackbufferPassNode {
         node_id: NodeId,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let pass = self.handle;
-        if pass.has_data() {
-            record_input(device, cmd, graph, node_id, "input", outputs_cache);
-            pass.record_data(device, cmd);
-        }
         Ok(())
     }
 }

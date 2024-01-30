@@ -11,7 +11,7 @@ pub struct ComputePassData {
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct ComputePass {
     desc: ComputePassDescription,
-    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
+    #[cfg_attr(feature = "persistence", serde(skip))]
     data: Option<ComputePassData>
 }
 

@@ -116,7 +116,7 @@ impl ProtosApp {
                     let node = &self.state.graph[self.user_state.backbuffer_node.unwrap()];
 
                     match &node.user_data.template {
-                        ProtosNodeTemplate::BackbufferPass{ handle } => {
+                        ProtosNodeTemplate::BackbufferPass(handle) => {
                             let mut pass = handle.lock().unwrap();
                             // Resize render_target if required.
                             let render_target_size = egui::Vec2::new(pass.get_width() as f32, pass.get_height() as f32);

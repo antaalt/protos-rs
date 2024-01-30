@@ -1,28 +1,30 @@
+use super::resource::{Resource, ResourceDataTrait, ResourceDescTrait};
 
+
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct CameraDescription {
 
 }
+#[derive(Debug, Default)]
 pub struct CameraData {
 
 }
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-pub struct Camera {
-    desc: CameraDescription,
-    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
-    data: Option<CameraData>,
+
+pub type Camera = Resource<CameraDescription, CameraData>;
+
+impl ResourceDescTrait for CameraDescription {
+    
 }
 
-impl Default for CameraDescription {
-    fn default() -> Self {
-        Self {}
+impl ResourceDataTrait<CameraDescription> for CameraData {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &CameraDescription) -> anyhow::Result<Self> {
+        Ok(Self {
+            
+        })
     }
 }
-impl Default for Camera {
-    fn default() -> Self {
-        Self {
-            desc: CameraDescription::default(),
-            data: None,
-        }
-    }
+
+impl Camera {
+    
 }

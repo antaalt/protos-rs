@@ -1,14 +1,13 @@
-use std::{sync::Arc, borrow::Cow, collections::HashMap};
+use std::{sync::{Arc, Mutex}, borrow::Cow, collections::HashMap};
 
 use egui::Vec2;
-use egui_node_graph::{InputParamKind, NodeTemplateIter, NodeId, NodeTemplateTrait, Graph, UserResponseTrait, NodeDataTrait, NodeResponse, OutputId};
+use egui_node_graph::{NodeTemplateIter, NodeId, NodeTemplateTrait, Graph, UserResponseTrait, NodeDataTrait, NodeResponse, OutputId};
 
-use crate::gfx;
+use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, ProtosNodeData, ProtosGraphState, ProtosResponse, node_backbuffer_pass::BackbufferPassNode, node_texture_file::TextureFileNode, node_texture_resource::TextureResourceNode, node_graphic_pass::GraphicPassNode, node_buffer::BufferNode, node_compute_pass::ComputePassNode, node_camera::CameraNode, node_mesh::MeshNode};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, ProtosNodeData, ProtosGraphState, ProtosResponse, node_buffer::BufferNode, node_texture_file::TextureFileNode, node_texture_resource::TextureResourceNode, node_graphic_pass::GraphicPassNode, node_backbuffer_pass::BackbufferPassNode};
-
-// Trait could be applied directly to protosNodeTemplate ResourceHandle ?
 pub trait ProtosNode {
+    // Get node name
+    fn get_name(&self) -> &str;
     // Describe the node
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId);
     // Evaluate its input / output
@@ -28,58 +27,29 @@ pub trait ProtosNode {
         outputs_cache: &mut OutputsCache) -> anyhow::Result<()>;
 }
 
+// TODO:ProtosNode should be a node handle instead for simplification...
+pub type NodeHandle<Type: ProtosNode> = Arc<Mutex<Type>>;
+
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosNodeTemplate {
-    BackbufferPass { handle: gfx::ResourceHandle<gfx::BackbufferPass> },
-    GraphicPass { handle: gfx::ResourceHandle<gfx::GraphicPass> }, 
-    ComputePass { handle: gfx::ResourceHandle<gfx::ComputePass> }, 
-    Buffer { handle: gfx::ResourceHandle<gfx::Buffer> }, 
-    FileTexture { handle: gfx::ResourceHandle<gfx::Texture> },
-    ResourceTexture { handle: gfx::ResourceHandle<gfx::Texture> },
-    Camera { handle: gfx::ResourceHandle<gfx::Camera> }, 
-    Mesh { handle: gfx::ResourceHandle<gfx::Mesh> }, 
+    BackbufferPass (NodeHandle<BackbufferPassNode>),
+    GraphicPass (NodeHandle<GraphicPassNode>), 
+    ComputePass (NodeHandle<ComputePassNode>), 
+    Buffer (NodeHandle<BufferNode>), 
+    FileTexture (NodeHandle<TextureFileNode>),
+    ResourceTexture (NodeHandle<TextureResourceNode>),
+    Camera (NodeHandle<CameraNode>), 
+    Mesh (NodeHandle<MeshNode>), 
 }
 
 impl ProtosNodeTemplate {
-    pub fn can_be_recorded(&self) -> bool {
+    pub fn get_node(&self) -> Box<NodeHandle<dyn ProtosNode>> {
         match self {
-            // Can
-            ProtosNodeTemplate::BackbufferPass{ .. } => true,
-            ProtosNodeTemplate::GraphicPass{ .. } => true,
-            ProtosNodeTemplate::ComputePass{ .. } => true,
-            // Cannot
-            ProtosNodeTemplate::Buffer{ .. } => false,
-            ProtosNodeTemplate::FileTexture{ .. } => false,
-            ProtosNodeTemplate::ResourceTexture{ .. } => false,
-            ProtosNodeTemplate::Camera{ .. } => false,
-            ProtosNodeTemplate::Mesh{ .. } => false,
+            ProtosNodeTemplate::BackbufferPass(handle) => { Box::new(handle.clone()) }
+            _ => { unimplemented!("Missing node implementation"); }
         }
     }
-    pub fn get_name(&self) -> &str {
-        match self {
-            ProtosNodeTemplate::BackbufferPass{ .. } => "BackbufferPass",
-            ProtosNodeTemplate::GraphicPass{ .. } => "GraphicPass",
-            ProtosNodeTemplate::ComputePass{ .. } => "ComputePass",
-            ProtosNodeTemplate::Buffer{ .. } => "Buffer",
-            ProtosNodeTemplate::FileTexture{ .. } => "FileTexture",
-            ProtosNodeTemplate::ResourceTexture{ .. } => "ResourceTexture",
-            ProtosNodeTemplate::Camera{ .. } => "Camera",
-            ProtosNodeTemplate::Mesh{ .. } => "Mesh",
-         }
-    }
-    // might need to return a box instead...
-    fn into_node(&self) -> Box<dyn ProtosNode> {
-        match self {
-            ProtosNodeTemplate::Buffer { handle } => { Box::new(BufferNode::new(handle.clone())) }
-            ProtosNodeTemplate::FileTexture { handle } => { Box::new(TextureFileNode::new(handle.clone())) }
-            ProtosNodeTemplate::ResourceTexture { handle } => { Box::new(TextureResourceNode::new(handle.clone())) }
-            ProtosNodeTemplate::GraphicPass { handle } => { Box::new(GraphicPassNode::new(handle.clone())) }
-            ProtosNodeTemplate::BackbufferPass { handle } => { Box::new(BackbufferPassNode::new(handle.clone())) }
-            _ => unimplemented!("You need to register node here") // TODO: display
-        }
-    }
-    
 }
 
 // A trait for the node kinds, which tells the library how to build new nodes
@@ -91,7 +61,9 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
     type UserState = ProtosGraphState;
 
     fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
-        Cow::Borrowed(self.get_name())
+        let locked_node = self.get_node();
+        let node = locked_node.lock().unwrap();
+        Cow::Borrowed(node.get_name())
     }
 
     fn node_graph_label(&self, user_state: &mut Self::UserState) -> String {
@@ -110,7 +82,8 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
         _user_state: &mut Self::UserState,
         node_id: NodeId,
     ) {
-        let node = self.into_node();
+        let locked_node = self.get_node();
+        let node = locked_node.lock().unwrap();
         node.build(graph, node_id);
     }
 }
@@ -125,14 +98,14 @@ impl NodeTemplateIter for AllProtosNodeTemplates {
         // will use to display it to the user. Crates like strum can reduce the
         // boilerplate in enumerating all variants of an enum.
         vec![
-            ProtosNodeTemplate::BackbufferPass { handle: Arc::default() },
-            ProtosNodeTemplate::GraphicPass{ handle: Arc::default() },
-            ProtosNodeTemplate::ComputePass{ handle: Arc::default() },
-            ProtosNodeTemplate::Buffer{ handle: Arc::default() },
-            ProtosNodeTemplate::FileTexture{ handle: Arc::default() },
-            ProtosNodeTemplate::ResourceTexture{ handle: Arc::default() },
-            ProtosNodeTemplate::Camera{ handle: Arc::default() },
-            ProtosNodeTemplate::Mesh{ handle: Arc::default() },
+            ProtosNodeTemplate::BackbufferPass (NodeHandle::default()),
+            ProtosNodeTemplate::GraphicPass(NodeHandle::default()),
+            ProtosNodeTemplate::ComputePass(NodeHandle::default()),
+            ProtosNodeTemplate::Buffer(NodeHandle::default()),
+            ProtosNodeTemplate::FileTexture(NodeHandle::default()),
+            ProtosNodeTemplate::ResourceTexture(NodeHandle::default()),
+            ProtosNodeTemplate::Camera(NodeHandle::default()),
+            ProtosNodeTemplate::Mesh(NodeHandle::default()),
         ]
     }
 }
@@ -200,7 +173,7 @@ impl NodeDataTrait for ProtosNodeData {
 }
 
 pub type OutputsCache = HashMap<OutputId, ProtosValueType>;
-// TODO: could be default trait
+// TODO: could be default function of ProtosNode
 pub fn evaluate_node(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -209,7 +182,8 @@ pub fn evaluate_node(
     available_size: Vec2,
     outputs_cache: &mut OutputsCache,
 ) -> anyhow::Result<()> {
-    let node = graph[node_id].user_data.template.into_node();
+    let locked_node = graph[node_id].user_data.template.get_node();
+    let node = locked_node.lock().unwrap();
     node.evaluate(device, queue, graph, node_id, available_size, outputs_cache)
 }
 
@@ -249,7 +223,8 @@ pub fn record_node(
     node_id: NodeId,
     outputs_cache: &mut OutputsCache,
 ) {
-    let node = graph[node_id].user_data.template.into_node();
+    let locked_node = graph[node_id].user_data.template.get_node();
+    let node = locked_node.lock().unwrap();
     // TODO: can be recorded ?
     node.record(device, cmd, graph, node_id, outputs_cache);
 }

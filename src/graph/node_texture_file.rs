@@ -1,16 +1,18 @@
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, evaluate_input, populate_output, OutputsCache}};
+use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{evaluate_input, populate_output, OutputsCache, ProtosNode}};
 
 use crate::gfx;
 
+#[derive(Default)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct TextureFileNode {
-    handle: gfx::ResourceHandle<gfx::Texture>
+    handle: gfx::Texture
 }
 
 impl TextureFileNode {
-    pub fn new(handle: gfx::ResourceHandle<gfx::Texture>) -> Self {
+    pub fn new(handle: gfx::Texture) -> Self {
         Self {
             handle
         }
@@ -18,6 +20,9 @@ impl TextureFileNode {
 }
 
 impl ProtosNode for TextureFileNode {
+    fn get_name(&self) -> &str {
+        "FileTexture"
+    }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
         graph.add_input_param(
             node_id.clone(),
@@ -43,7 +48,7 @@ impl ProtosNode for TextureFileNode {
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
         let path = evaluate_input(device, queue, graph, node_id, available_size, "Path", outputs_cache)?.try_to_string()?;
-        let mut texture = self.handle.lock().unwrap();
+        let mut texture = self.handle;
         //texture.set_path();
         texture.update_data(device, queue)?;
         populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(self.handle.clone()) }, outputs_cache);

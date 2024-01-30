@@ -5,12 +5,14 @@ use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNod
 
 use crate::gfx;
 
+#[derive(Default)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct GraphicPassNode {
-    handle: gfx::ResourceHandle<gfx::GraphicPass>
+    handle: gfx::GraphicPass
 }
 
 impl GraphicPassNode {
-    pub fn new(handle: gfx::ResourceHandle<gfx::GraphicPass>) -> Self {
+    pub fn new(handle: gfx::GraphicPass) -> Self {
         Self {
             handle
         }
@@ -18,6 +20,9 @@ impl GraphicPassNode {
 }
 
 impl ProtosNode for GraphicPassNode {
+    fn get_name(&self) -> &str {
+        "Graphic pass"
+    }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
         
         // TODO for loop
@@ -45,7 +50,7 @@ impl ProtosNode for GraphicPassNode {
         // We can then update or not the pipeline with given data.
         // For recording command list, we will need something similar just running for graphic pass & compute pass.
 
-        let mut pass = self.handle.lock().unwrap();
+        let mut pass = self.handle;
         // Input & co should be templated somewhere, trait to get these informations ?
         for i in 0..1 {
             //let name = format!("SRV{}", i)
@@ -84,7 +89,7 @@ impl ProtosNode for GraphicPassNode {
         node_id: NodeId,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let pass = self.handle.lock().unwrap();
+        let pass = self.handle;
         if pass.has_data() {
             // TODO: for loop
             record_input(device, cmd, graph, node_id, "SRV0", outputs_cache);

@@ -1,28 +1,30 @@
+use super::resource::{Resource, ResourceDataTrait, ResourceDescTrait};
 
+
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct MeshDescription {
-    
+
 }
+#[derive(Debug)]
 pub struct MeshData {
 
 }
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-pub struct Mesh {
-    desc: MeshDescription,
-    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
-    data: Option<MeshData>,
+
+pub type Mesh = Resource<MeshDescription, MeshData>;
+
+impl ResourceDescTrait for MeshDescription {
+    
 }
 
-impl Default for MeshDescription {
-    fn default() -> Self {
-        Self {}
+impl ResourceDataTrait<MeshDescription> for MeshData {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &MeshDescription) -> anyhow::Result<Self> {
+        Ok(Self {
+            
+        })
     }
 }
-impl Default for Mesh {
-    fn default() -> Self {
-        Self {
-            desc: MeshDescription::default(),
-            data: None,
-        }
-    }
+
+impl Mesh {
+    
 }

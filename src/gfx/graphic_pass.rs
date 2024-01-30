@@ -1,10 +1,9 @@
-use std::default;
 use std::sync::Arc;
 use std::sync::Mutex;
 
 use wgpu::RenderPassDescriptor;
 
-use super::core::*;
+use super::ResourceHandle;
 use super::texture::*;
 
 pub enum VertexFactory {
@@ -109,7 +108,7 @@ pub struct GraphicPassData {
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct GraphicPass {
     desc: GraphicPassDescription,
-    #[cfg_attr(feature = "persistence", serde(skip_serializing, skip_deserializing))]
+    #[cfg_attr(feature = "persistence", serde(skip))]
     data: Option<GraphicPassData>,
     dirty: bool,
 }

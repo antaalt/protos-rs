@@ -1,7 +1,7 @@
 use egui::DragValue;
 use egui_node_graph::{WidgetValueTrait, NodeId};
 // TODO: Should be renamed connection.rs & merged with data_type.rs
-use crate::gfx;
+use crate::gfx::{self, ResourceHandle};
 
 use super::{ProtosResponse, ProtosGraphState, ProtosNodeData};
 
@@ -10,8 +10,8 @@ use super::{ProtosResponse, ProtosGraphState, ProtosNodeData};
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosValueType {
     Unknown {},
-    Texture { value: Option<gfx::ResourceHandle<gfx::Texture>> },
-    Buffer { value: Option<gfx::ResourceHandle<gfx::Buffer>> },
+    Texture { value: Option<ResourceHandle<gfx::Texture>> },
+    Buffer { value: Option<ResourceHandle<gfx::Buffer>> },
     Scalar { value: f32 },
     Vec2 { value: [f32; 2] },
     Vec3 { value: [f32; 3] },
@@ -27,9 +27,9 @@ impl Default for ProtosValueType {
 }
 
 impl ProtosValueType {
-    pub fn try_to_texture(self) -> anyhow::Result<Option<gfx::ResourceHandle<gfx::Texture>>> {
+    pub fn try_to_texture(self) -> anyhow::Result<Option<ResourceHandle<gfx::Texture>>> {
         if let ProtosValueType::Texture { value } = self {
-            Ok(value.clone())
+            Ok(value)
         } else {
             anyhow::bail!("Invalid cast to texture")
         }

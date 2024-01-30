@@ -5,13 +5,14 @@ use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNod
 
 use crate::gfx;
 
-// TODO: template node ? at least content ?
+#[derive(Default)]
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct BufferNode {
-    handle: gfx::ResourceHandle<gfx::Buffer>
+    handle: gfx::Buffer
 }
 
 impl BufferNode {
-    pub fn new(handle: gfx::ResourceHandle<gfx::Buffer>) -> Self {
+    pub fn new(handle: gfx::Buffer) -> Self {
         Self {
             handle
         }
@@ -19,6 +20,9 @@ impl BufferNode {
 }
 
 impl ProtosNode for BufferNode {
+    fn get_name(&self) -> &str {
+        "Buffer"
+    }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
         graph.add_input_param(
             node_id,
@@ -53,8 +57,10 @@ impl ProtosNode for BufferNode {
     ) -> anyhow::Result<()> {
         let size = evaluate_input(device, queue, graph, node_id, available_size, "Size", outputs_cache).unwrap().try_to_scalar();
         let format = evaluate_input(device, queue, graph, node_id, available_size, "Format", outputs_cache).unwrap().try_to_vec2();
-        let mut buffer = self.handle.lock().unwrap();
-        buffer.update_data(device);
+        let mut buffer = self.handle;
+        //buffer.set_size();
+        //buffer.set_format();
+        buffer.update_data(device, queue);
         populate_output(graph, node_id, "buffer", ProtosValueType::Buffer { value: Some(self.handle.clone()) }, outputs_cache);
         
         Ok(())

@@ -1,4 +1,4 @@
-mod core;
+mod resource;
 mod texture;
 mod buffer;
 mod graphic_pass;
@@ -8,7 +8,13 @@ mod backbuffer;
 mod camera;
 mod mesh;
 
-pub use self::core::ResourceHandle;
+use std::sync::Arc;
+use std::sync::Mutex;
+
+// TODO: unused & duplicated
+// Should be replaced by some kind of handle describing the resource within the node.
+// We end up with Rc of Rc... but is this an issue ?
+pub type ResourceHandle<Type> = Arc<Mutex<Type>>;
 
 pub use self::backbuffer::BackbufferPass;
 pub use self::graphic_pass::GraphicPass;
