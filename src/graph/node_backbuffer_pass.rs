@@ -36,9 +36,9 @@ impl ProtosNode for BackbufferPassNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let mut pass = self.handle.lock().unwrap();
         let input = self.evaluate_input(device, queue, graph, node_id, available_size, "input", outputs_cache)?;
         // Check input is valid type.
+        let mut pass = self.handle.lock().unwrap();
         if let ProtosValueType::Texture { value } = input {
             pass.set_origin(value);
         } else {
