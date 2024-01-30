@@ -1,22 +1,14 @@
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, evaluate_input, populate_output, OutputsCache}};
+use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, OutputsCache}};
 
 use crate::gfx;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct TextureResourceNode {
     handle: gfx::ResourceHandle<gfx::Texture>
-}
-
-impl TextureResourceNode {
-    pub fn new(handle: gfx::ResourceHandle<gfx::Texture>) -> Self {
-        Self {
-            handle
-        }
-    }
 }
 
 impl ProtosNode for TextureResourceNode {
@@ -47,12 +39,12 @@ impl ProtosNode for TextureResourceNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let dimensions = evaluate_input(device, queue, graph, node_id, available_size, "Dimensions", outputs_cache)?.try_to_vec2()?;
+        let dimensions = self.evaluate_input(device, queue, graph, node_id, available_size, "Dimensions", outputs_cache)?.try_to_vec2()?;
         let mut texture = self.handle.lock().unwrap();
         texture.set_width(dimensions[0] as u32);
         texture.set_height(dimensions[1] as u32);
         texture.update_data(device, queue)?;
-        populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(self.handle.clone()) }, outputs_cache);
+        self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(self.handle.clone()) }, outputs_cache);
         
         Ok(())
     }

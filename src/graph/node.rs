@@ -5,6 +5,8 @@ use egui_node_graph::{NodeTemplateIter, NodeId, NodeTemplateTrait, Graph, UserRe
 
 use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, ProtosNodeData, ProtosGraphState, ProtosResponse, node_backbuffer_pass::BackbufferPassNode, node_texture_file::TextureFileNode, node_texture_resource::TextureResourceNode, node_graphic_pass::GraphicPassNode, node_buffer::BufferNode, node_compute_pass::ComputePassNode, node_camera::CameraNode, node_mesh::MeshNode};
 
+pub type OutputsCache = HashMap<OutputId, ProtosValueType>;
+
 pub trait ProtosNode {
     // Get node name
     fn get_name(&self) -> &str;
@@ -25,28 +27,135 @@ pub trait ProtosNode {
         graph: &ProtosGraph,
         node_id: NodeId,
         outputs_cache: &mut OutputsCache) -> anyhow::Result<()>;
+
+    // Evaluate node
+    fn evaluate_node(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        graph: &ProtosGraph,
+        node_id: NodeId, // Should be passed at creation...
+        available_size: Vec2,
+        outputs_cache: &mut OutputsCache,
+    ) -> anyhow::Result<()> {
+        //let locked_node = graph[node_id].user_data.template.get_node();
+        //let node = locked_node.lock().unwrap();
+        self.evaluate(device, queue, graph, node_id, available_size, outputs_cache)
+    }
+
+    // Evaluates the input value of
+    fn record_input(
+        &self,
+        device: &wgpu::Device,
+        cmd: &mut wgpu::CommandEncoder,
+        graph: &ProtosGraph,
+        node_id: NodeId,
+        param_name: &str,
+        outputs_cache: &mut OutputsCache,
+    ) {
+        let input_id = graph[node_id].get_input(param_name).unwrap();
+
+        // The output of another node is connected.
+        if let Some(other_output_id) = graph.connection(input_id) {
+            // The value was already computed due to the evaluation of some other
+            // node. We simply return value from the cache.
+            if let Some(other_value) = outputs_cache.get(&other_output_id) {
+                let _ = other_value;
+            }
+            // This is the first time encountering this node, so we need to
+            // recursively evaluate it.
+            else {
+                // Calling this will populate the cache
+                self.record_node(device, cmd, graph, graph[other_output_id].node, outputs_cache);
+            }
+        }
+    }
+
+    fn record_node(
+        &self,
+        device: &wgpu::Device,
+        cmd: &mut wgpu::CommandEncoder,
+        graph: &ProtosGraph,
+        node_id: NodeId,
+        outputs_cache: &mut OutputsCache,
+    ) {
+        // TODO: can be recorded ?
+        self.record(device, cmd, graph, node_id, outputs_cache).unwrap();
+    }
+
+    // Simply fill output with a value.
+    fn populate_output(
+        &self,
+        graph: &ProtosGraph,
+        node_id: NodeId,
+        param_name: &str,
+        value: ProtosValueType,
+        outputs_cache: &mut OutputsCache,
+    ) {
+        let output_id = graph[node_id].get_output(param_name).unwrap();
+        outputs_cache.insert(output_id, value.clone());
+    }
+
+    // Evaluates the input value of
+    fn evaluate_input(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        graph: &ProtosGraph,
+        node_id: NodeId,
+        available_size: Vec2,
+        param_name: &str,
+        outputs_cache: &mut OutputsCache,
+    ) -> anyhow::Result<ProtosValueType> {
+        let input_id = graph[node_id].get_input(param_name)?;
+
+        // The output of another node is connected.
+        if let Some(other_output_id) = graph.connection(input_id) {
+            // The value was already computed due to the evaluation of some other
+            // node. We simply return value from the cache.
+            if let Some(other_value) = outputs_cache.get(&other_output_id) {
+                Ok(other_value.clone())
+            }
+            // This is the first time encountering this node, so we need to
+            // recursively evaluate it.
+            else {
+                match self.evaluate_node(device, queue, graph, graph[other_output_id].node, available_size, outputs_cache) {
+                    Ok(()) => {
+                        Ok(outputs_cache
+                        .get(&other_output_id)
+                        .expect("Cache should be populated").clone())
+                    }
+                    Err(err) => anyhow::bail!("Node failed to compile : {}.", err.to_string())
+                }
+            }
+        }
+        // No existing connection, take the inline value instead.
+        else {
+            Ok(graph[input_id].value.clone())
+        }
+    }
 }
 
 
 // TODO:ProtosNode should be a node handle instead for simplification...
 // with a trait. but every node need a custom impl...
-pub type NodeHandle<Type> = Arc<Mutex<Type>>;
+//pub type NodeHandle<Type> = Arc<Mutex<Type>>;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosNodeTemplate {
-    BackbufferPass (NodeHandle<BackbufferPassNode>),
-    GraphicPass (NodeHandle<GraphicPassNode>), 
-    ComputePass (NodeHandle<ComputePassNode>), 
-    Buffer (NodeHandle<BufferNode>), 
-    FileTexture (NodeHandle<TextureFileNode>),
-    ResourceTexture (NodeHandle<TextureResourceNode>),
-    Camera (NodeHandle<CameraNode>), 
-    Mesh (NodeHandle<MeshNode>), 
+    BackbufferPass (BackbufferPassNode),
+    GraphicPass (GraphicPassNode), 
+    ComputePass (ComputePassNode), 
+    Buffer (BufferNode), 
+    FileTexture (TextureFileNode),
+    ResourceTexture (TextureResourceNode),
+    Camera (CameraNode), 
+    Mesh (MeshNode), 
 }
 
 impl ProtosNodeTemplate {
-    pub fn get_node(&self) -> Box<NodeHandle<dyn ProtosNode>> {
+    pub fn get_node(&self) -> Box<dyn ProtosNode> {
         match self {
             ProtosNodeTemplate::BackbufferPass(handle) => { Box::new(handle.clone()) }
             ProtosNodeTemplate::GraphicPass(handle) => { Box::new(handle.clone()) }
@@ -70,8 +179,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
     type UserState = ProtosGraphState;
 
     fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
-        let locked_node = self.get_node();
-        let node = locked_node.lock().unwrap();
+        let node = self.get_node();
         Cow::Owned(node.get_name().to_owned())
     }
 
@@ -91,8 +199,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
         _user_state: &mut Self::UserState,
         node_id: NodeId,
     ) {
-        let locked_node = self.get_node();
-        let node = locked_node.lock().unwrap();
+        let node = self.get_node();
         node.build(graph, node_id);
     }
 }
@@ -107,14 +214,14 @@ impl NodeTemplateIter for AllProtosNodeTemplates {
         // will use to display it to the user. Crates like strum can reduce the
         // boilerplate in enumerating all variants of an enum.
         vec![
-            ProtosNodeTemplate::BackbufferPass (NodeHandle::default()),
-            ProtosNodeTemplate::GraphicPass(NodeHandle::default()),
-            ProtosNodeTemplate::ComputePass(NodeHandle::default()),
-            ProtosNodeTemplate::Buffer(NodeHandle::default()),
-            ProtosNodeTemplate::FileTexture(NodeHandle::default()),
-            ProtosNodeTemplate::ResourceTexture(NodeHandle::default()),
-            ProtosNodeTemplate::Camera(NodeHandle::default()),
-            ProtosNodeTemplate::Mesh(NodeHandle::default()),
+            ProtosNodeTemplate::BackbufferPass (BackbufferPassNode::default()),
+            ProtosNodeTemplate::GraphicPass(GraphicPassNode::default()),
+            ProtosNodeTemplate::ComputePass(ComputePassNode::default()),
+            ProtosNodeTemplate::Buffer(BufferNode::default()),
+            ProtosNodeTemplate::FileTexture(TextureFileNode::default()),
+            ProtosNodeTemplate::ResourceTexture(TextureResourceNode::default()),
+            ProtosNodeTemplate::Camera(CameraNode::default()),
+            ProtosNodeTemplate::Mesh(MeshNode::default()),
         ]
     }
 }
@@ -178,114 +285,5 @@ impl NodeDataTrait for ProtosNodeData {
         }
 
         responses
-    }
-}
-
-pub type OutputsCache = HashMap<OutputId, ProtosValueType>;
-// TODO: could be default function of ProtosNode
-pub fn evaluate_node(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    available_size: Vec2,
-    outputs_cache: &mut OutputsCache,
-) -> anyhow::Result<()> {
-    let locked_node = graph[node_id].user_data.template.get_node();
-    let node = locked_node.lock().unwrap();
-    node.evaluate(device, queue, graph, node_id, available_size, outputs_cache)
-}
-
-
-// Evaluates the input value of
-pub fn record_input(
-    //&self,
-    device: &wgpu::Device,
-    cmd: &mut wgpu::CommandEncoder,
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    param_name: &str,
-    outputs_cache: &mut OutputsCache,
-) {
-    let input_id = graph[node_id].get_input(param_name).unwrap();
-
-    // The output of another node is connected.
-    if let Some(other_output_id) = graph.connection(input_id) {
-        // The value was already computed due to the evaluation of some other
-        // node. We simply return value from the cache.
-        if let Some(other_value) = outputs_cache.get(&other_output_id) {
-            let _ = other_value;
-        }
-        // This is the first time encountering this node, so we need to
-        // recursively evaluate it.
-        else {
-            // Calling this will populate the cache
-            record_node(device, cmd, graph, graph[other_output_id].node, outputs_cache);
-        }
-    }
-}
-
-pub fn record_node(
-    device: &wgpu::Device,
-    cmd: &mut wgpu::CommandEncoder,
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    outputs_cache: &mut OutputsCache,
-) {
-    let locked_node = graph[node_id].user_data.template.get_node();
-    let node = locked_node.lock().unwrap();
-    // TODO: can be recorded ?
-    node.record(device, cmd, graph, node_id, outputs_cache).unwrap();
-}
-
-// Simply fill output with a value.
-pub fn populate_output(
-    //&self,
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    param_name: &str,
-    value: ProtosValueType,
-    outputs_cache: &mut OutputsCache,
-) {
-    let output_id = graph[node_id].get_output(param_name).unwrap();
-    outputs_cache.insert(output_id, value.clone());
-}
-
-// Evaluates the input value of
-pub fn evaluate_input(
-    //&self,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    graph: &ProtosGraph,
-    node_id: NodeId,
-    available_size: Vec2,
-    param_name: &str,
-    outputs_cache: &mut OutputsCache,
-) -> anyhow::Result<ProtosValueType> {
-    let input_id = graph[node_id].get_input(param_name)?;
-
-    // The output of another node is connected.
-    if let Some(other_output_id) = graph.connection(input_id) {
-        // The value was already computed due to the evaluation of some other
-        // node. We simply return value from the cache.
-        if let Some(other_value) = outputs_cache.get(&other_output_id) {
-            Ok(other_value.clone())
-        }
-        // This is the first time encountering this node, so we need to
-        // recursively evaluate it.
-        else {
-            match evaluate_node(device, queue, graph, graph[other_output_id].node, available_size, outputs_cache) {
-                Ok(()) => {
-                    Ok(outputs_cache
-                    .get(&other_output_id)
-                    .expect("Cache should be populated").clone())
-                }
-                Err(err) => anyhow::bail!("Node failed to compile : {}.", err.to_string())
-            }
-        }
-    }
-    // No existing connection, take the inline value instead.
-    else {
-        Ok(graph[input_id].value.clone())
     }
 }

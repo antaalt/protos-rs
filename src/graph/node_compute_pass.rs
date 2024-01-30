@@ -1,22 +1,14 @@
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, OutputsCache, populate_output, record_input}};
+use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, OutputsCache}};
 
 use crate::gfx;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct ComputePassNode {
     handle: gfx::ResourceHandle<gfx::ComputePass>
-}
-
-impl ComputePassNode {
-    pub fn new(handle: gfx::ResourceHandle<gfx::ComputePass>) -> Self {
-        Self {
-            handle
-        }
-    }
 }
 
 impl ProtosNode for ComputePassNode {

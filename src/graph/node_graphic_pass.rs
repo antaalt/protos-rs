@@ -1,22 +1,14 @@
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, evaluate_input, OutputsCache, populate_output, record_input}};
+use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, OutputsCache}};
 
 use crate::gfx;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct GraphicPassNode {
     handle: gfx::ResourceHandle<gfx::GraphicPass>
-}
-
-impl GraphicPassNode {
-    pub fn new(handle: gfx::ResourceHandle<gfx::GraphicPass>) -> Self {
-        Self {
-            handle
-        }
-    }
 }
 
 impl ProtosNode for GraphicPassNode {
@@ -54,7 +46,7 @@ impl ProtosNode for GraphicPassNode {
         // Input & co should be templated somewhere, trait to get these informations ?
         for i in 0..1 {
             //let name = format!("SRV{}", i)
-            let srv = evaluate_input(device, queue, graph, node_id, available_size, "SRV0", outputs_cache)?;
+            let srv = self.evaluate_input(device, queue, graph, node_id, available_size, "SRV0", outputs_cache)?;
             // Check input is valid type.
             if let ProtosValueType::Texture { value } = srv {
                 pass.set_shader_resource_view(i, value);
@@ -71,12 +63,12 @@ impl ProtosNode for GraphicPassNode {
         }
         
         // Will call create if not created already.
-        pass.update_data(device, queue);
+        pass.update_data(device, queue)?;
         
         for i in 0..num_attachment {
             // Output graphic pass will populate output. need to ensure data is created already.
             // TODO: custom name per output. (MRT support)
-            populate_output(graph, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(i) }, outputs_cache);
+            self.populate_output(graph, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(i) }, outputs_cache);
         }
         
         Ok(())
@@ -92,7 +84,7 @@ impl ProtosNode for GraphicPassNode {
         let pass = self.handle.lock().unwrap();
         if pass.has_data() {
             // TODO: for loop
-            record_input(device, cmd, graph, node_id, "SRV0", outputs_cache);
+            self.record_input(device, cmd, graph, node_id, "SRV0", outputs_cache);
             pass.record_data(device, cmd);
             Ok(()) // TODO: propagate
         } else {

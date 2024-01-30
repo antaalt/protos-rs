@@ -5,18 +5,10 @@ use super::{core::ProtosGraph, node::{ProtosNode, OutputsCache}};
 
 use crate::gfx;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct MeshNode {
     mesh: gfx::ResourceHandle<gfx::Mesh>
-}
-
-impl MeshNode {
-    pub fn new(mesh: gfx::ResourceHandle<gfx::Mesh>) -> Self {
-        Self {
-            mesh
-        }
-    }
 }
 
 impl ProtosNode for MeshNode {

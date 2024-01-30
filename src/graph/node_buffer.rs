@@ -1,22 +1,14 @@
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, evaluate_input, OutputsCache, populate_output}};
+use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, OutputsCache}};
 
 use crate::gfx;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct BufferNode {
     handle: gfx::ResourceHandle<gfx::Buffer>
-}
-
-impl BufferNode {
-    pub fn new(handle: gfx::ResourceHandle<gfx::Buffer>) -> Self {
-        Self {
-            handle
-        }
-    }
 }
 
 impl ProtosNode for BufferNode {
@@ -55,13 +47,13 @@ impl ProtosNode for BufferNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let size = evaluate_input(device, queue, graph, node_id, available_size, "Size", outputs_cache).unwrap().try_to_scalar();
-        let format = evaluate_input(device, queue, graph, node_id, available_size, "Format", outputs_cache).unwrap().try_to_vec2();
+        let size = self.evaluate_input(device, queue, graph, node_id, available_size, "Size", outputs_cache)?.try_to_scalar()?;
+        let format = self.evaluate_input(device, queue, graph, node_id, available_size, "Format", outputs_cache)?.try_to_scalar()?;
         let mut buffer = self.handle.lock().unwrap();
-        //buffer.set_size();
-        //buffer.set_format();
+        buffer.set_size(size as u32);
+        buffer.set_format(format as u32);
         buffer.update_data(device, queue)?;
-        populate_output(graph, node_id, "buffer", ProtosValueType::Buffer { value: Some(self.handle.clone()) }, outputs_cache);
+        self.populate_output(graph, node_id, "buffer", ProtosValueType::Buffer { value: Some(self.handle.clone()) }, outputs_cache);
         
         Ok(())
     }

@@ -15,10 +15,9 @@ mod response;
 
 pub use self::data_type::ProtosDataType;
 
+pub use self::node::ProtosNode;
 pub use self::node::ProtosNodeTemplate;
 pub use self::node::AllProtosNodeTemplates;
-pub use self::node::record_node;
-pub use self::node::evaluate_node;
 
 pub use self::core::ProtosNodeData;
 pub use self::core::ProtosEditorState;

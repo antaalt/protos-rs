@@ -1,22 +1,16 @@
+use std::rc::Rc;
+
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, evaluate_input, OutputsCache, record_input}};
+use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, OutputsCache}};
 
 use crate::gfx;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct BackbufferPassNode {
     pub handle: gfx::ResourceHandle<gfx::BackbufferPass>
-}
-
-impl BackbufferPassNode {
-    pub fn new(handle: gfx::ResourceHandle<gfx::BackbufferPass>) -> Self {
-        Self {
-            handle
-        }
-    }
 }
 
 impl ProtosNode for BackbufferPassNode {
@@ -43,7 +37,7 @@ impl ProtosNode for BackbufferPassNode {
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
         let mut pass = self.handle.lock().unwrap();
-        let input = evaluate_input(device, queue, graph, node_id, available_size, "input", outputs_cache)?;
+        let input = self.evaluate_input(device, queue, graph, node_id, available_size, "input", outputs_cache)?;
         // Check input is valid type.
         if let ProtosValueType::Texture { value } = input {
             pass.set_origin(value);
@@ -66,7 +60,7 @@ impl ProtosNode for BackbufferPassNode {
     ) -> anyhow::Result<()> {
         let pass = self.handle.lock().unwrap();
         if pass.has_data() {
-            record_input(device, cmd, graph, node_id, "input", outputs_cache);
+            self.record_input(device, cmd, graph, node_id, "input", outputs_cache);
             pass.record_data(device, cmd);
         }
         Ok(())

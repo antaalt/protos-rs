@@ -1,11 +1,11 @@
 use egui::Vec2;
 use egui_node_graph::NodeId;
 
-use super::{core::ProtosGraph, node::{ProtosNode, OutputsCache}};
+use super::{core::ProtosGraph, node::{OutputsCache, ProtosNode}, ProtosValueType};
 
 use crate::gfx;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct CameraNode {
     handle: gfx::ResourceHandle<gfx::Camera>

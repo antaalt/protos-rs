@@ -83,8 +83,7 @@ impl BackbufferPass {
     // TODO: move this in node_backbuffer
     pub fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder) {
         if self.desc.origin.is_some() {
-            let origin_locked = self.desc.origin.as_ref().unwrap().lock();
-            let origin = origin_locked.unwrap();
+            let origin = self.desc.origin.as_ref().unwrap().lock().unwrap();
             let target_locked = self.data.as_ref().unwrap().target.as_ref();
             let target = target_locked.unwrap();
             // Copy target to final storage.

@@ -223,7 +223,6 @@ impl GraphicPass {
             let mut render_targets = Vec::new();
             //for rt in &data.render_target {
                 let locked = data.render_target[0].lock().unwrap();
-                //let locked = rt.lock().unwrap();
                 let value = locked.get_view_handle().unwrap();
                 render_targets.push(Some(wgpu::RenderPassColorAttachment {
                     view: value,
@@ -271,9 +270,7 @@ impl GraphicPass {
             self.desc.bind_group[0].resize(index as usize + 1, default_bind_group_entry(index));
             self.dirty = true;
         }
-        if srv.is_some() {
-            //let texture_locked = srv.clone().unwrap();
-            //let texture = texture_locked.lock().unwrap();            
+        if srv.is_some() {          
             self.desc.bind_group[0][index as usize].binding = index;
             self.desc.bind_group[0][index as usize].count = None;
             self.desc.bind_group[0][index as usize].ty = wgpu::BindingType::Texture { 
@@ -291,9 +288,6 @@ impl GraphicPass {
             }
         }
         self.desc.shader_resource_view[index as usize] = srv;
-    }
-    pub fn clear_shader_resource_view(&mut self, index: u32) {
-        self.set_shader_resource_view(index, None);
     }
     pub fn set_render_target(&mut self, index: u32, rt : &AttachmentDescription) {
         if index as usize >= self.desc.render_target_desc.len() {

@@ -116,8 +116,7 @@ impl ProtosApp {
                     let node = &self.state.graph[self.user_state.backbuffer_node.unwrap()];
 
                     match &node.user_data.template {
-                        ProtosNodeTemplate::BackbufferPass(handle) => {
-                            let pass_node = handle.lock().unwrap();
+                        ProtosNodeTemplate::BackbufferPass(pass_node) => {
                             let mut pass = pass_node.handle.lock().unwrap();
                             // Resize render_target if required.
                             let render_target_size = egui::Vec2::new(pass.get_width() as f32, pass.get_height() as f32);
@@ -185,10 +184,14 @@ impl ProtosApp {
         if let Some(node) = self.user_state.backbuffer_node {
             if self.state.graph.nodes.contains_key(node) {
                 // Evaluate & create nodes
-                match evaluate_node(device, queue, &self.state.graph, node, self.runtime_state.available_size, &mut HashMap::new()) {
+                let backbuffer_node = match &self.state.graph.nodes[node].user_data.template {
+                    ProtosNodeTemplate::BackbufferPass(node_handle) => node_handle,
+                    _ => unreachable!("to backbuffer or not to backbuffer ?")
+                };
+                match backbuffer_node.evaluate_node(device, queue, &self.state.graph, node, self.runtime_state.available_size, &mut HashMap::new()) {
                     Ok(()) => {
                         // Record node.
-                        record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
+                        backbuffer_node.record_node(device, cmd, &self.state.graph, node, &mut HashMap::new());
                     }
                     Err(err) => {
                         ctx.debug_painter().text(

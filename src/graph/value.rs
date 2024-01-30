@@ -74,6 +74,7 @@ impl WidgetValueTrait for ProtosValueType {
         // inline parameter widgets.
         match self {
             ProtosValueType::Texture { value } => {
+                let _ = value;
                 ui.label(param_name);
                 //ui.horizontal(|ui| {
                    // ui.label("x");
@@ -83,6 +84,7 @@ impl WidgetValueTrait for ProtosValueType {
                 //});
             }
             ProtosValueType::Buffer { value } => {
+                let _ = value;
                 ui.label(param_name);
                 // TODO retrieve value here 
                 //ui.horizontal(|ui| {
@@ -114,6 +116,7 @@ impl WidgetValueTrait for ProtosValueType {
             ProtosValueType::String { value }  => {
                 ui.add(egui::TextEdit::singleline(value));
                 ui.horizontal(|ui| {
+                    let _ = ui;
                 });
             }
             _  => {

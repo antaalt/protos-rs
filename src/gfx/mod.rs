@@ -11,10 +11,16 @@ mod mesh;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-// TODO: unused & duplicated
-// Should be replaced by some kind of handle describing the resource within the node.
-// We end up with Rc of Rc... but is this an issue ?
 pub type ResourceHandle<Type> = Arc<Mutex<Type>>;
+
+/*struct ResourceHandle<Type : Resource> {
+    handle: Resource<
+}
+
+impl ResourceHandle<> {
+    visit();
+    visit_mut();
+}*/
 
 pub use self::backbuffer::BackbufferPass;
 pub use self::graphic_pass::GraphicPass;
