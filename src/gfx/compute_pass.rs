@@ -54,8 +54,8 @@ impl ResourceDataTrait<ComputePassDescription> for ComputePassData {
         let validation = pollster::block_on(device.pop_error_scope()).and_then(|err| {
             Some(err)
         });
-        if validation.is_some() {
-            anyhow::bail!(validation.unwrap().to_string())
+        if let Some(v) = validation {
+            anyhow::bail!(v.to_string())
         } else {
             Ok(Self {
                 compute_pipeline,

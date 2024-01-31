@@ -38,7 +38,7 @@ pub trait ProtosNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache,
     ) -> anyhow::Result<()> {
-        println!("Evaluating node {:?} of type {}", node_id, self.get_name());
+        //println!("Evaluating node {:?} of type {}", node_id, self.get_name());
         self.evaluate(device, queue, graph, node_id, available_size, outputs_cache)
     }
 

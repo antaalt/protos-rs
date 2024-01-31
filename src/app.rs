@@ -126,13 +126,13 @@ impl ProtosApp {
                             }
                             let view_result = pass.get_view_handle();
                             match view_result {
-                                Ok(..) => {
-                                    let view = view_result.unwrap();
+                                Ok(view) => {
                                     // Create resource if not created.
                                     if self.runtime_state.egui_texture_id == egui::TextureId::default() {
                                         self.runtime_state.egui_texture_id = egui_rpass.egui_texture_from_wgpu_texture(device, view, self.runtime_state.egui_image_filter);
                                     }
-                                    if self.runtime_state.dirty_egui_texture {
+                                    // Should do this update only if backbuffer changed or dirty
+                                    //if self.runtime_state.dirty_egui_texture {
                                         let update_result = egui_rpass.update_egui_texture_from_wgpu_texture(
                                             device, 
                                             view,
@@ -140,7 +140,7 @@ impl ProtosApp {
                                             self.runtime_state.egui_texture_id
                                         );
                                         assert!(update_result.is_ok());
-                                    }
+                                    //}
                                     ui.image(self.runtime_state.egui_texture_id, ui.available_size());
                                 },
                                 Err(e) => {
@@ -149,7 +149,7 @@ impl ProtosApp {
                                 }
                             }
                         }
-                        _ => unreachable!("Backbuffer node is node a backbuffer pass...")
+                        _ => unreachable!("Backbuffer node is not a backbuffer pass...")
                     }
                     
                 } else {

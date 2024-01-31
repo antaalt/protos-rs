@@ -39,7 +39,11 @@ impl ProtosNode for BackbufferPassNode {
         // Check input is valid type.
         let mut pass = self.handle.lock().unwrap();
         if let ProtosValueType::Texture { value } = input {
-            pass.set_origin(value);
+            if let Some(v) = value {
+                pass.set_origin(v);
+            } else {
+                anyhow::bail!("No input set.")
+            }
         } else {
             anyhow::bail!("Invalid render target in backbuffer")
         }
