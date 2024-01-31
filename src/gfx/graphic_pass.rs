@@ -211,57 +211,52 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
             bind_group_layout: bind_group_layout 
         })
     }
-}
-impl GraphicPass {
-    pub fn has_data(&self) -> bool {
-        self.data.is_some()
-    }
-    pub fn record_data(&self, device : &wgpu::Device, cmd: &mut wgpu::CommandEncoder) {
-        if self.data.is_some() {
-            let data = self.data.as_ref().unwrap();
+    fn record_data(&self, device : &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &GraphicPassDescription) -> anyhow::Result<()> {
 
-            let mut render_targets = Vec::new();
-            //for rt in &data.render_target {
-                let locked = data.render_target[0].lock().unwrap();
-                let value = locked.get_view_handle().unwrap();
-                render_targets.push(Some(wgpu::RenderPassColorAttachment {
-                    view: value,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    }
-                }));
-            //}
-            
-            let render_pass = cmd.begin_render_pass(&RenderPassDescriptor{
-                label: Some("render_pass_random"),
-                color_attachments: &render_targets.as_ref(),
-                depth_stencil_attachment:None/*Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
+        let mut render_targets = Vec::new();
+        //for rt in &data.render_target {
+            let locked = self.render_target[0].lock().unwrap();
+            let value = locked.get_view_handle().unwrap();
+            render_targets.push(Some(wgpu::RenderPassColorAttachment {
+                view: value,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.1,
+                        g: 0.2,
+                        b: 0.3,
+                        a: 1.0,
                     }),
-                    stencil_ops: None,
-                }),*/
-            });
-            //render_pass.
-            // This should depend on mesh informations mostly...
-            // Should have an input Geometry (or mesh...). for all graphic pass.
-            // Could be simple quad or more complex shape.
-            //render_pass.set_pipeline(&self.data.unwrap().render_pipeline);
-            // Bind group are coming from geometry... or srv view...
-            /*render_pass.set_bind_group(0, &self.data.unwrap().bind_group_layout);
-            render_pass.draw(vertices, instances);*/
-
-        }
+                    store: true,
+                }
+            }));
+        //}
+        
+        let render_pass = cmd.begin_render_pass(&RenderPassDescriptor{
+            label: Some("render_pass_random"),
+            color_attachments: &render_targets.as_ref(),
+            depth_stencil_attachment:None/*Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_texture.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),*/
+        });
+        //render_pass.
+        // This should depend on mesh informations mostly...
+        // Should have an input Geometry (or mesh...). for all graphic pass.
+        // Could be simple quad or more complex shape.
+        //render_pass.set_pipeline(&self.data.unwrap().render_pipeline);
+        // Bind group are coming from geometry... or srv view...
+        /*render_pass.set_bind_group(0, &self.data.unwrap().bind_group_layout);
+        render_pass.draw(vertices, instances);*/
+        Ok(())
     }
+}
+
+impl GraphicPass {
     pub fn set_shader_resource_view(&mut self, index: u32, srv : Option<ResourceHandle<Texture>>) {
         // TODO: resize should be done by desc data ? or data is built by shader resource view that are set ? 
         if index as usize >= self.desc.shader_resource_view.len() {

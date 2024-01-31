@@ -23,6 +23,9 @@ impl ResourceDataTrait<MeshDescription> for MeshData {
             
         })
     }
+    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &MeshDescription) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 impl Mesh {

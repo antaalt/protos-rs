@@ -3,7 +3,7 @@ pub trait ResourceDescTrait : Sized {
 }
 pub trait ResourceDataTrait<Desc : ResourceDescTrait> : Sized {
     fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &Desc) -> anyhow::Result<Self>;
-    //fn update_data(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
+    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &Desc) -> anyhow::Result<()>;
 }
 
 // Needed to avoid Default::default() being called on Data
@@ -64,6 +64,16 @@ where
             Ok(())
         } else {
             Ok(())
+        }
+    }
+    pub fn has_data(&self) -> bool {
+        self.data.is_some()
+    }
+    pub fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder) -> anyhow::Result<()> {
+        if let Some(data) = &self.data {
+            data.record_data(device, cmd, &self.desc)
+        } else {
+            anyhow::bail!("No data")
         }
     }
 }

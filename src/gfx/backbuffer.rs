@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{any, sync::Arc};
 
 use super::{resource::{Resource, ResourceDataTrait, ResourceDescTrait,}, Texture, ResourceHandle};
 
@@ -30,6 +30,37 @@ impl ResourceDataTrait<BackbufferPassDescription> for BackbufferPassData {
         Ok(Self {
             target: Some(texture),
         })
+    }
+    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &BackbufferPassDescription) -> anyhow::Result<()> {
+        if let Some(origin_locked) = &desc.origin {
+            if let Some(target) = &self.target {
+                let origin = origin_locked.lock().unwrap();
+                // Copy target to final storage.
+                let src = wgpu::ImageCopyTexture{ 
+                    texture: origin.get_handle().expect("Origin not loaded"),
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                };
+                let dst = wgpu::ImageCopyTexture{ 
+                    texture: target.get_handle().expect("Target not loaded"),
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                };
+                
+                cmd.copy_texture_to_texture(src, dst, wgpu::Extent3d {
+                    width: desc.width,
+                    height: desc.height,
+                    depth_or_array_layers:1,
+                });
+                Ok(())
+            } else {
+                anyhow::bail!("No target in backbuffer");
+            }
+        } else {
+            anyhow::bail!("No origin in backbuffer");
+        }
     }
 }
 
@@ -67,37 +98,6 @@ impl BackbufferPass {
             }
         } else {
             anyhow::bail!("No data")
-        }
-    }
-    pub fn has_data(&self) -> bool {
-        return self.data.is_some();
-    }
-    pub fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder) {
-        if let Some(origin_locked) = &self.desc.origin {
-            if let Some(data) = &self.data {
-                if let Some(target) = &data.target {
-                    let origin = origin_locked.lock().unwrap();
-                    // Copy target to final storage.
-                    let src = wgpu::ImageCopyTexture{ 
-                        texture: origin.get_handle().expect("Origin not loaded"),
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    };
-                    let dst = wgpu::ImageCopyTexture{ 
-                        texture: target.get_handle().expect("Target not loaded"),
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    };
-                    
-                    cmd.copy_texture_to_texture(src, dst, wgpu::Extent3d {
-                        width: self.desc.width,
-                        height: self.desc.height,
-                        depth_or_array_layers:1,
-                    });
-                }
-            }
         }
     }
 }

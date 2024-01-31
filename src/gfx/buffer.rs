@@ -24,6 +24,9 @@ impl ResourceDataTrait<BufferDescription> for BufferData {
             
         })
     }
+    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &BufferDescription) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 impl Buffer {

@@ -63,11 +63,7 @@ impl ResourceDataTrait<ComputePassDescription> for ComputePassData {
             })
         }
     }
-}
-
-impl ComputePass {
-    pub fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder) {
-        let _ = device;
-        let _ = cmd;
+    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &ComputePassDescription) -> anyhow::Result<()> {
+        Ok(())
     }
 }

@@ -137,6 +137,9 @@ impl ResourceDataTrait<TextureDescription> for TextureData {
             }
         }
     }
+    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &TextureDescription) -> anyhow::Result<()> {
+        Ok(()) // Not recordable...
+    }
 }
 
 impl Texture {    

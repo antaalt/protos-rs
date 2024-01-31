@@ -23,6 +23,9 @@ impl ResourceDataTrait<CameraDescription> for CameraData {
             
         })
     }
+    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &CameraDescription) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 impl Camera {

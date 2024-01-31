@@ -1,4 +1,6 @@
 
+use std::any;
+
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
@@ -61,11 +63,9 @@ impl ProtosNode for BackbufferPassNode {
         node_id: NodeId,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
+        // TODO should store inputs & set them automatically (we only need to define it at startup.)
+        self.record_input(device, cmd, graph, node_id, "input", outputs_cache)?;
         let pass = self.handle.lock().unwrap();
-        if pass.has_data() {
-            self.record_input(device, cmd, graph, node_id, "input", outputs_cache)?;
-            pass.record_data(device, cmd);
-        }
-        Ok(())
+        pass.record_data(device, cmd)
     }
 }

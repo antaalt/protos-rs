@@ -1,7 +1,7 @@
 use egui::Vec2;
 use egui_node_graph::NodeId;
 
-use super::{core::ProtosGraph, node::{OutputsCache, ProtosNode}, ProtosValueType};
+use super::{core::ProtosGraph, node::{OutputsCache, ProtosNode}};
 
 use crate::gfx;
 
