@@ -188,10 +188,10 @@ impl ProtosApp {
                     ProtosNodeTemplate::BackbufferPass(node_handle) => node_handle,
                     _ => unreachable!("to backbuffer or not to backbuffer ?")
                 };
-                match backbuffer_node.evaluate_node(device, queue, &self.state.graph, node_id, self.runtime_state.available_size, &mut HashMap::new()) {
+                match backbuffer_node.evaluate(device, queue, &self.state.graph, node_id, self.runtime_state.available_size, &mut HashMap::new()) {
                     Ok(()) => {
                         // Record node.
-                        match backbuffer_node.record_node(device, cmd, &self.state.graph, node_id, &mut HashMap::new()) {
+                        match backbuffer_node.record(device, cmd, &self.state.graph, node_id, &mut HashMap::new()) {
                             Ok(()) => {}
                             Err(err) => {
                                 ctx.debug_painter().text(

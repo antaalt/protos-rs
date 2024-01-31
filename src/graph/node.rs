@@ -28,20 +28,6 @@ pub trait ProtosNode {
         node_id: NodeId,
         outputs_cache: &mut OutputsCache) -> anyhow::Result<()>;
 
-    // Evaluate node
-    fn evaluate_node(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        graph: &ProtosGraph,
-        node_id: NodeId, // Should be passed at creation...
-        available_size: Vec2,
-        outputs_cache: &mut OutputsCache,
-    ) -> anyhow::Result<()> {
-        //println!("Evaluating node {:?} of type {}", node_id, self.get_name());
-        self.evaluate(device, queue, graph, node_id, available_size, outputs_cache)
-    }
-
     // Evaluates the input value of
     fn record_input(
         &self,
@@ -63,22 +49,10 @@ pub trait ProtosNode {
             } else {
                 // First time in this node, recurse it.
                 let input_node = graph[graph[other_output_id].node].user_data.template.get_node();
-                return input_node.record_node(device, cmd, graph, graph[other_output_id].node, outputs_cache);
+                return input_node.record(device, cmd, graph, graph[other_output_id].node, outputs_cache);
             }
         }
         Ok(())
-    }
-
-    fn record_node(
-        &self,
-        device: &wgpu::Device,
-        cmd: &mut wgpu::CommandEncoder,
-        graph: &ProtosGraph,
-        node_id: NodeId,
-        outputs_cache: &mut OutputsCache,
-    ) -> anyhow::Result<()> {
-        // TODO: can be recorded ?
-        self.record(device, cmd, graph, node_id, outputs_cache)
     }
 
     // Simply fill output with a value.
@@ -118,7 +92,7 @@ pub trait ProtosNode {
             // recursively evaluate it.
             else {
                 let input_node = graph[graph[other_output_id].node].user_data.template.get_node();
-                match input_node.evaluate_node(device, queue, graph, graph[other_output_id].node, available_size, outputs_cache) {
+                match input_node.evaluate(device, queue, graph, graph[other_output_id].node, available_size, outputs_cache) {
                     Ok(()) => {
                         Ok(outputs_cache
                         .get(&other_output_id)
