@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap};
 use egui::Vec2;
 use egui_node_graph::{NodeTemplateIter, NodeId, NodeTemplateTrait, Graph, UserResponseTrait, NodeDataTrait, NodeResponse, OutputId};
 
-use super::{core::ProtosGraph, node_backbuffer_pass::BackbufferPassNode, node_buffer::BufferNode, node_camera::CameraNode, node_compute_pass::ComputePassNode, node_graphic_pass::GraphicPassNode, node_mesh::MeshNode, node_shader::ShaderNode, node_texture_file::TextureFileNode, node_texture_resource::TextureResourceNode, ProtosDataType, ProtosGraphState, ProtosNodeData, ProtosResponse, ProtosValueType};
+use super::{core::ProtosGraph, nodes::{BackbufferPassNode, BufferNode, CameraNode, ComputePassNode, GraphicPassNode, MeshNode, ShaderNode, TextureFileNode, TextureResourceNode}, ProtosDataType, ProtosGraphState, ProtosNodeData, ProtosResponse, ProtosValueType};
 
 pub type OutputsCache = HashMap<OutputId, ProtosValueType>;
 
@@ -204,7 +204,7 @@ impl NodeTemplateIter for AllProtosNodeTemplates {
         // will use to display it to the user. Crates like strum can reduce the
         // boilerplate in enumerating all variants of an enum.
         vec![
-            ProtosNodeTemplate::BackbufferPass (BackbufferPassNode::default()),
+            ProtosNodeTemplate::BackbufferPass(BackbufferPassNode::default()),
             ProtosNodeTemplate::GraphicPass(GraphicPassNode::default()),
             ProtosNodeTemplate::ComputePass(ComputePassNode::default()),
             ProtosNodeTemplate::Buffer(BufferNode::default()),

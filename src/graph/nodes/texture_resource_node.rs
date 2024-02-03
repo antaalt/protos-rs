@@ -1,28 +1,24 @@
-use std::{path::PathBuf, str::FromStr};
-
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{OutputsCache, ProtosNode}};
-
-use crate::gfx;
+use crate::{gfx, graph::{core::ProtosGraph, node::OutputsCache, ProtosDataType, ProtosNode, ProtosValueType}};
 
 #[derive(Default, Clone)]
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-pub struct TextureFileNode {
+#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+pub struct TextureResourceNode {
     handle: gfx::ResourceHandle<gfx::Texture>
 }
 
-impl ProtosNode for TextureFileNode {
+impl ProtosNode for TextureResourceNode {
     fn get_name(&self) -> &str {
-        "FileTexture"
+        "ResourceTexture"
     }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
         graph.add_input_param(
             node_id.clone(),
-            String::from("Path"),
-            ProtosDataType::String,
-            ProtosValueType::String(String::from("")),
+            String::from("Dimensions"),
+            ProtosDataType::Vec2,
+            ProtosValueType::Vec2([100.0, 100.0]),
             InputParamKind::ConstantOnly,
             true,
         );
@@ -44,12 +40,13 @@ impl ProtosNode for TextureFileNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let path = self.evaluate_input(device, queue, graph, node_id, available_size, "Path", outputs_cache)?.try_to_string()?;
+        let dimensions = self.evaluate_input(device, queue, graph, node_id, available_size, "Dimensions", outputs_cache)?.try_to_vec2()?;
         let mut texture = self.handle.lock().unwrap();
-        texture.set_path(PathBuf::from_str(path.as_str())?);
+        texture.set_width(dimensions[0] as u32);
+        texture.set_height(dimensions[1] as u32);
         texture.update_data(device, queue)?;
         self.populate_output(graph, node_id, "texture", ProtosValueType::Texture(Some(self.handle.clone())), outputs_cache);
-
+        
         Ok(())
     }
     fn record(

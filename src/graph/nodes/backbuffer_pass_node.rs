@@ -1,9 +1,7 @@
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, node::{ProtosNode, OutputsCache}};
-
-use crate::gfx::{self};
+use crate::{gfx, graph::{core::ProtosGraph, node::OutputsCache, ProtosDataType, ProtosNode, ProtosValueType}};
 
 #[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]

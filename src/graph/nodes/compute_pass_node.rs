@@ -1,21 +1,31 @@
 use egui::Vec2;
-use egui_node_graph::NodeId;
+use egui_node_graph::{InputParamKind, NodeId};
 
-use super::{core::ProtosGraph, node::{OutputsCache, ProtosNode}};
-
-use crate::gfx;
+use crate::{gfx, graph::{core::ProtosGraph, node::OutputsCache, ProtosDataType, ProtosNode, ProtosValueType}};
 
 #[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-pub struct CameraNode {
-    handle: gfx::ResourceHandle<gfx::Camera>
+pub struct ComputePassNode {
+    handle: gfx::ResourceHandle<gfx::ComputePass>
 }
 
-impl ProtosNode for CameraNode {
+impl ProtosNode for ComputePassNode {
     fn get_name(&self) -> &str {
-        "Camera"
+        "Compute pass"
     }
-    fn build(&self, _graph: &mut ProtosGraph, _node_id: NodeId) {
+    fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
+        
+        // TODO for loop
+        graph.add_input_param(
+            node_id,
+            "SRV0".to_string(),
+            ProtosDataType::Texture,
+            ProtosValueType::Texture(None),
+            InputParamKind::ConnectionOnly,
+            true,
+        );
+        // TODO for loop
+        graph.add_output_param(node_id, "RT0".to_string(), ProtosDataType::Texture);
     }
     fn ui(&self, _graph: &ProtosGraph, _node_id: NodeId, _ui: &mut egui::Ui) {
         
@@ -29,6 +39,7 @@ impl ProtosNode for CameraNode {
         _available_size: Vec2,
         _outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
+        
         Ok(())
     }
     fn record(
@@ -39,6 +50,6 @@ impl ProtosNode for CameraNode {
         _node_id: NodeId,
         _outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        Ok(()) // Nothing to record here
+        Ok(())
     }
 }
