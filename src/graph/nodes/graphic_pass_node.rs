@@ -9,20 +9,23 @@ pub struct GraphicPassNode {
     handle: gfx::ResourceHandle<gfx::GraphicPass>
 }
 
+
 impl ProtosNode for GraphicPassNode {
     fn get_name(&self) -> &str {
         "Graphic pass"
     }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
         // TODO: for loop with +/- button
-        graph.add_input_param(
-            node_id,
-            "SRV0".to_string(),
-            ProtosDataType::Texture,
-            ProtosValueType::Texture(None),
-            InputParamKind::ConnectionOnly,
-            true,
-        );
+        for i in 0..1 {
+            graph.add_input_param(
+                node_id,
+                format!("SRV{}", i),
+                ProtosDataType::Texture,
+                ProtosValueType::Texture(None),
+                InputParamKind::ConnectionOnly,
+                true,
+            );
+        }
         graph.add_input_param(
             node_id,
             "Vertex shader".to_string(),
@@ -48,7 +51,9 @@ impl ProtosNode for GraphicPassNode {
             true,
         );
         // TODO: for loop with +/- button
-        graph.add_output_param(node_id, "RT0".to_string(), ProtosDataType::Texture);
+        for i in 0..1 {
+            graph.add_output_param(node_id, format!("RT{}", i), ProtosDataType::Texture);
+        }
     }
     fn ui(&self, _graph: &ProtosGraph, _node_id: NodeId, _ui: &mut egui::Ui) {
         

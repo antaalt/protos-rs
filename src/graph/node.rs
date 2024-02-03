@@ -48,13 +48,16 @@ pub trait ProtosNode {
             // node. We simply return value from the cache.
             if let Some(other_value) = outputs_cache.get(&other_output_id) {
                 let _ = other_value;
+                Ok(())
             } else {
                 // First time in this node, recurse it.
-                let input_node = graph[graph[other_output_id].node].user_data.template.get_node();
-                return input_node.record(device, cmd, graph, graph[other_output_id].node, outputs_cache);
+                graph[graph[other_output_id].node].user_data.template.visit_node(|input_node| {
+                    input_node.record(device, cmd, graph, graph[other_output_id].node, outputs_cache)
+                })
             }
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     // Simply fill output with a value.
@@ -93,15 +96,16 @@ pub trait ProtosNode {
             // This is the first time encountering this node, so we need to
             // recursively evaluate it.
             else {
-                let input_node = graph[graph[other_output_id].node].user_data.template.get_node();
-                match input_node.evaluate(device, queue, graph, graph[other_output_id].node, available_size, outputs_cache) {
-                    Ok(()) => {
-                        Ok(outputs_cache
-                        .get(&other_output_id)
-                        .expect("Cache should be populated").clone())
+                graph[graph[other_output_id].node].user_data.template.visit_node(|input_node| {
+                    match input_node.evaluate(device, queue, graph, graph[other_output_id].node, available_size, outputs_cache) {
+                        Ok(()) => {
+                            Ok(outputs_cache
+                            .get(&other_output_id)
+                            .expect("Cache should be populated").clone())
+                        }
+                        Err(err) => anyhow::bail!("Node failed to compile : {}.", err.to_string())
                     }
-                    Err(err) => anyhow::bail!("Node failed to compile : {}.", err.to_string())
-                }
+                })
             }
         }
         // No existing connection, take the inline value instead.
@@ -131,20 +135,7 @@ pub enum ProtosNodeTemplate {
 }
 
 impl ProtosNodeTemplate {
-    pub fn get_node(&self) -> Box<dyn ProtosNode> {
-        match self {
-            ProtosNodeTemplate::BackbufferPass(handle) => { Box::new(handle.clone()) }
-            ProtosNodeTemplate::GraphicPass(handle) => { Box::new(handle.clone()) }
-            ProtosNodeTemplate::ComputePass(handle) => { Box::new(handle.clone()) }
-            ProtosNodeTemplate::FileTexture(handle) => { Box::new(handle.clone()) }
-            ProtosNodeTemplate::ResourceTexture(handle) => { Box::new(handle.clone()) }
-            ProtosNodeTemplate::Buffer(handle) => { Box::new(handle.clone()) }
-            ProtosNodeTemplate::Camera(handle) => { Box::new(handle.clone()) }
-            ProtosNodeTemplate::Mesh(handle) => { Box::new(handle.clone()) }
-            ProtosNodeTemplate::Shader(handle) => { Box::new(handle.clone()) }
-        }
-    }
-    pub fn visit_node(&self, f : impl FnOnce(&dyn ProtosNode)) {
+    pub fn visit_node<T>(&self, f : impl FnOnce(&dyn ProtosNode) -> anyhow::Result<T>) -> anyhow::Result<T> {
         match self {
             ProtosNodeTemplate::BackbufferPass(handle) => { f(handle) }
             ProtosNodeTemplate::GraphicPass(handle) => { f(handle) }
@@ -168,8 +159,12 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
     type UserState = ProtosGraphState;
 
     fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
-        let node = self.get_node();
-        Cow::Owned(node.get_name().to_owned())
+        match self.visit_node(|node| {
+            Ok(node.get_name().to_owned())
+        }) {
+            Ok(name) => Cow::Owned(name),
+            Err(err) => unreachable!("{}", err.to_string())
+        }
     }
 
     fn node_graph_label(&self, user_state: &mut Self::UserState) -> String {
@@ -188,9 +183,11 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
         _user_state: &mut Self::UserState,
         node_id: NodeId,
     ) {
-        println!("Building node : {}", self.get_node().get_name());
-        let node = self.get_node();
-        node.build(graph, node_id);
+        self.visit_node(|node| {
+            println!("Building node : {}", node.get_name());
+            node.build(graph, node_id);
+            Ok(())
+        }).expect("Should not fail.");
     }
 }
 
@@ -276,7 +273,8 @@ impl NodeDataTrait for ProtosNodeData {
             _ => { 
                 self.template.visit_node(|node| {
                     node.ui(graph, node_id, ui);
-                });
+                    Ok(())
+                }).expect("Should not fail.");
                 return vec![]; 
             }
         }
