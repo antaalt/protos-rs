@@ -16,13 +16,28 @@ impl ProtosNode for GraphicPassNode {
         "Graphic pass"
     }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
-        
-        // TODO for loop
+        // TODO: for loop with +/- button
         graph.add_input_param(
             node_id,
             "SRV0".to_string(),
             ProtosDataType::Texture,
             ProtosValueType::Texture { value: None },
+            InputParamKind::ConnectionOnly,
+            true,
+        );
+        graph.add_input_param(
+            node_id,
+            "Vertex shader".to_string(),
+            ProtosDataType::Shader,
+            ProtosValueType::Shader { value: None },
+            InputParamKind::ConnectionOnly,
+            true,
+        );
+        graph.add_input_param(
+            node_id,
+            "Fragment shader".to_string(),
+            ProtosDataType::Shader,
+            ProtosValueType::Shader { value: None },
             InputParamKind::ConnectionOnly,
             true,
         );
@@ -34,8 +49,11 @@ impl ProtosNode for GraphicPassNode {
             InputParamKind::ConnectionOnly,
             true,
         );
-        // TODO for loop
+        // TODO: for loop with +/- button
         graph.add_output_param(node_id, "RT0".to_string(), ProtosDataType::Texture);
+    }
+    fn ui(&self, graph: &ProtosGraph, node_id: NodeId, ui: &mut egui::Ui) {
+        
     }
     fn evaluate(
         &self, 
@@ -52,7 +70,6 @@ impl ProtosNode for GraphicPassNode {
 
         let mut pass = self.handle.lock().unwrap();
 
-        
         let geometry = self.evaluate_input(device, queue, graph, node_id, available_size, "Geometry", outputs_cache)?;
         if let ProtosValueType::Mesh { value } = geometry {
             if let Some(v) = value {
@@ -80,7 +97,7 @@ impl ProtosNode for GraphicPassNode {
             // Should gather these informations from a evaluate_output. -> reach output node, read its data & select informations.
             let mut desc = gfx::AttachmentDescription::default();
             desc.set_size(available_size.x as u32, available_size.y as u32);
-            pass.set_render_target(0, &desc);
+            pass.set_render_target(i, &desc);
         }
         
         // Will call create if not created already.

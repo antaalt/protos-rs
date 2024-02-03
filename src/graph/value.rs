@@ -13,6 +13,7 @@ pub enum ProtosValueType {
     Texture { value: Option<ResourceHandle<gfx::Texture>> },
     Buffer { value: Option<ResourceHandle<gfx::Buffer>> },
     Mesh { value: Option<ResourceHandle<gfx::Mesh>> },
+    Shader { value: Option<ResourceHandle<gfx::Shader>>},
     Scalar { value: f32 },
     Vec2 { value: [f32; 2] },
     Vec3 { value: [f32; 3] },
@@ -77,25 +78,20 @@ impl WidgetValueTrait for ProtosValueType {
             ProtosValueType::Texture { value } => {
                 let _ = value;
                 ui.label(param_name);
-                //ui.horizontal(|ui| {
-                   // ui.label("x");
-                   // ui.add(DragValue::new(&mut value.x));
-                    //ui.label("y");
-                    //ui.add(DragValue::new(&mut value.y));
-                //});
             }
             ProtosValueType::Buffer { value } => {
                 let _ = value;
                 ui.label(param_name);
-                // TODO retrieve value here 
-                //ui.horizontal(|ui| {
-                    //ui.label(param_name);
-                    //ui.add(DragValue::new(v));
-                //});
             }
             ProtosValueType::Mesh { value } => {
                 let _ = value;
                 ui.label(param_name);
+            }
+            ProtosValueType::Shader { value }  => {
+                // TODO: syntax
+                let _ = value;
+                ui.label(param_name);
+                //ui.add(egui::TextEdit::multiline(value));
             }
             ProtosValueType::Scalar { value } => {
                 ui.horizontal(|ui| {
@@ -120,14 +116,9 @@ impl WidgetValueTrait for ProtosValueType {
             }
             ProtosValueType::String { value }  => {
                 ui.add(egui::TextEdit::singleline(value));
-                ui.horizontal(|ui| {
-                    let _ = ui;
-                });
             }
             _  => {
-                ui.horizontal(|ui| {
-                    ui.label("Unknown");
-                });
+                ui.label("Unknown");
             }
         }
         // This allows you to return your responses from the inline widgets.

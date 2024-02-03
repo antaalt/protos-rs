@@ -8,6 +8,7 @@ mod node_graphic_pass;
 mod node_backbuffer_pass;
 mod node_compute_pass;
 mod node_camera;
+mod node_shader;
 mod node_mesh;
 mod value;
 mod graph;

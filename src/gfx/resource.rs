@@ -76,4 +76,18 @@ where
             anyhow::bail!("No data")
         }
     }
+    pub fn visit_desc(&self, f: impl FnOnce(&Desc)) {
+        f(&self.desc)
+    }
+    pub fn visit_desc_mut(&mut self, f: impl FnOnce(&mut Desc)) {
+        f(&mut self.desc)
+    }
+    pub fn visit_data(&self, f: impl FnOnce(&Data)) -> bool {
+        if let Some(data) = &self.data {
+            f(&data);
+            true
+        } else {
+            false
+        }
+    }
 }

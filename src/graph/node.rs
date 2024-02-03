@@ -3,7 +3,7 @@ use std::{sync::{Arc, Mutex}, borrow::Cow, collections::HashMap};
 use egui::Vec2;
 use egui_node_graph::{NodeTemplateIter, NodeId, NodeTemplateTrait, Graph, UserResponseTrait, NodeDataTrait, NodeResponse, OutputId};
 
-use super::{ProtosDataType, ProtosValueType, core::ProtosGraph, ProtosNodeData, ProtosGraphState, ProtosResponse, node_backbuffer_pass::BackbufferPassNode, node_texture_file::TextureFileNode, node_texture_resource::TextureResourceNode, node_graphic_pass::GraphicPassNode, node_buffer::BufferNode, node_compute_pass::ComputePassNode, node_camera::CameraNode, node_mesh::MeshNode};
+use super::{core::ProtosGraph, node_backbuffer_pass::BackbufferPassNode, node_buffer::BufferNode, node_camera::CameraNode, node_compute_pass::ComputePassNode, node_graphic_pass::GraphicPassNode, node_mesh::MeshNode, node_shader::ShaderNode, node_texture_file::TextureFileNode, node_texture_resource::TextureResourceNode, ProtosDataType, ProtosGraphState, ProtosNodeData, ProtosResponse, ProtosValueType};
 
 pub type OutputsCache = HashMap<OutputId, ProtosValueType>;
 
@@ -12,6 +12,8 @@ pub trait ProtosNode {
     fn get_name(&self) -> &str;
     // Describe the node
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId);
+    // Describe the UI
+    fn ui(&self, graph: &ProtosGraph, node_id: NodeId, ui: &mut egui::Ui);
     // Evaluate its input / output
     fn evaluate(&self,
         device: &wgpu::Device,
@@ -125,6 +127,7 @@ pub enum ProtosNodeTemplate {
     ResourceTexture (TextureResourceNode),
     Camera (CameraNode), 
     Mesh (MeshNode), 
+    Shader(ShaderNode),
 }
 
 impl ProtosNodeTemplate {
@@ -138,6 +141,21 @@ impl ProtosNodeTemplate {
             ProtosNodeTemplate::Buffer(handle) => { Box::new(handle.clone()) }
             ProtosNodeTemplate::Camera(handle) => { Box::new(handle.clone()) }
             ProtosNodeTemplate::Mesh(handle) => { Box::new(handle.clone()) }
+            ProtosNodeTemplate::Shader(handle) => { Box::new(handle.clone()) }
+            _ => { unimplemented!("Missing node implementation"); }
+        }
+    }
+    pub fn visit_node(&self, f : impl FnOnce(&dyn ProtosNode)) {
+        match self {
+            ProtosNodeTemplate::BackbufferPass(handle) => { f(handle) }
+            ProtosNodeTemplate::GraphicPass(handle) => { f(handle) }
+            ProtosNodeTemplate::ComputePass(handle) => { f(handle) }
+            ProtosNodeTemplate::FileTexture(handle) => { f(handle) }
+            ProtosNodeTemplate::ResourceTexture(handle) => { f(handle) }
+            ProtosNodeTemplate::Buffer(handle) => { f(handle) }
+            ProtosNodeTemplate::Camera(handle) => { f(handle) }
+            ProtosNodeTemplate::Mesh(handle) => { f(handle) }
+            ProtosNodeTemplate::Shader(handle) => { f(handle) }
             _ => { unimplemented!("Missing node implementation"); }
         }
     }
@@ -196,6 +214,7 @@ impl NodeTemplateIter for AllProtosNodeTemplates {
             ProtosNodeTemplate::ResourceTexture(TextureResourceNode::default()),
             ProtosNodeTemplate::Camera(CameraNode::default()),
             ProtosNodeTemplate::Mesh(MeshNode::default()),
+            ProtosNodeTemplate::Shader(ShaderNode::default()),
         ]
     }
 }
@@ -216,48 +235,52 @@ impl NodeDataTrait for ProtosNodeData {
         &self,
         ui: &mut egui::Ui,
         node_id: NodeId,
-        _graph: &ProtosGraph,
+        graph: &ProtosGraph,
         user_state: &mut Self::UserState,
     ) -> Vec<NodeResponse<ProtosResponse, ProtosNodeData>>
     where
         ProtosResponse: UserResponseTrait,
     {
         match &self.template {
-            ProtosNodeTemplate::BackbufferPass { .. } => {
+            ProtosNodeTemplate::BackbufferPass(node) => {
                 // We only want bottom UI for backbuffer pass node.
+                node.ui(graph, node_id, ui);
+
+                // This logic is entirely up to the user. In this case, we check if the
+                // current node we're drawing is the active one, by comparing against
+                // the value stored in the global user state, and draw different button
+                // UIs based on that.
+
+                let mut responses = vec![];
+                let is_active = user_state
+                    .backbuffer_node
+                    .map(|id| id == node_id)
+                    .unwrap_or(false);
+
+                // Pressing the button will emit a custom user response to either set,
+                // or clear the active node. These responses do nothing by themselves,
+                // the library only makes the responses available to you after the graph
+                // has been drawn. See below at the update method for an example.
+                if !is_active {
+                    if ui.button("👁 Set active").clicked() {
+                        responses.push(NodeResponse::User(ProtosResponse::SetCurrentBackbuffer(node_id)));
+                    }
+                } else {
+                    let button =
+                        egui::Button::new(egui::RichText::new("👁 Active").color(egui::Color32::BLACK))
+                            .fill(egui::Color32::GOLD);
+                    if ui.add(button).clicked() {
+                        responses.push(NodeResponse::User(ProtosResponse::ClearCurrentBackbuffer));
+                    }
+                }
+                responses
             }
             _ => { 
+                self.template.visit_node(|node| {
+                    node.ui(graph, node_id, ui);
+                });
                 return vec![]; 
             }
         }
-        // This logic is entirely up to the user. In this case, we check if the
-        // current node we're drawing is the active one, by comparing against
-        // the value stored in the global user state, and draw different button
-        // UIs based on that.
-
-        let mut responses = vec![];
-        let is_active = user_state
-            .backbuffer_node
-            .map(|id| id == node_id)
-            .unwrap_or(false);
-
-        // Pressing the button will emit a custom user response to either set,
-        // or clear the active node. These responses do nothing by themselves,
-        // the library only makes the responses available to you after the graph
-        // has been drawn. See below at the update method for an example.
-        if !is_active {
-            if ui.button("👁 Set active").clicked() {
-                responses.push(NodeResponse::User(ProtosResponse::SetCurrentBackbuffer(node_id)));
-            }
-        } else {
-            let button =
-                egui::Button::new(egui::RichText::new("👁 Active").color(egui::Color32::BLACK))
-                    .fill(egui::Color32::GOLD);
-            if ui.add(button).clicked() {
-                responses.push(NodeResponse::User(ProtosResponse::ClearCurrentBackbuffer));
-            }
-        }
-
-        responses
     }
 }

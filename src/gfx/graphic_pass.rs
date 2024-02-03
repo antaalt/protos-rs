@@ -51,8 +51,7 @@ pub struct GraphicPassDescription {
     //vertex_buffer_layout : Vec<wgpu::VertexBufferLayout>,
 }
 pub struct GraphicPassData {
-    render_pipeline: wgpu::RenderPipeline,
-    bind_group_layout : wgpu::BindGroupLayout, // TODO vec multiple bind group
+    render_pipeline: wgpu::RenderPipeline, // TODO vec multiple bind group
     bind_group : wgpu::BindGroup,
     render_targets: Vec<ResourceHandle<Texture>>,
 }
@@ -180,11 +179,10 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
         Ok(GraphicPassData { 
             render_pipeline, 
             render_targets,
-            bind_group,
-            bind_group_layout 
+            bind_group
         })
     }
-    fn record_data(&self, device : &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &GraphicPassDescription) -> anyhow::Result<()> {
+    fn record_data(&self, _device : &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &GraphicPassDescription) -> anyhow::Result<()> {
 
         // Store locks to keep their lifetime for create_bind_group
         let mut color_attachments = Vec::new();

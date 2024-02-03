@@ -18,6 +18,9 @@ impl ProtosNode for BackbufferPassNode {
     fn get_name(&self) -> &str {
         "Backbuffer pass"
     }
+    fn ui(&self, graph: &ProtosGraph, node_id: NodeId, ui: &mut egui::Ui) {
+        
+    }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
         graph.add_input_param(
             node_id,
@@ -37,17 +40,13 @@ impl ProtosNode for BackbufferPassNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        let input = self.evaluate_input(device, queue, graph, node_id, available_size, "input", outputs_cache)?;
+        let input = self.evaluate_input(device, queue, graph, node_id, available_size, "input", outputs_cache)?.try_to_texture()?;
         // Check input is valid type.
         let mut pass = self.handle.lock().unwrap();
-        if let ProtosValueType::Texture { value } = input {
-            if let Some(v) = value {
-                pass.set_origin(v);
-            } else {
-                anyhow::bail!("No input set.")
-            }
+        if let Some(value) = input {
+            pass.set_origin(value);
         } else {
-            anyhow::bail!("Invalid render target in backbuffer")
+            anyhow::bail!("No input set.")
         }
         pass.set_size(available_size.x as u32, available_size.y as u32);
         // Will call create if not created already.

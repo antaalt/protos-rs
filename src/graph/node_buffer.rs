@@ -38,6 +38,9 @@ impl ProtosNode for BufferNode {
             ProtosDataType::Buffer
         );
     }
+    fn ui(&self, graph: &ProtosGraph, node_id: NodeId, ui: &mut egui::Ui) {
+        
+    }
     fn evaluate(
         &self, 
         device: &wgpu::Device,

@@ -29,6 +29,9 @@ impl ProtosNode for ComputePassNode {
         // TODO for loop
         graph.add_output_param(node_id, "RT0".to_string(), ProtosDataType::Texture);
     }
+    fn ui(&self, graph: &ProtosGraph, node_id: NodeId, ui: &mut egui::Ui) {
+        
+    }
     fn evaluate(
         &self, 
         device: &wgpu::Device,
