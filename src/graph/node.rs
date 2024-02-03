@@ -1,4 +1,4 @@
-use std::{sync::{Arc, Mutex}, borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap};
 
 use egui::Vec2;
 use egui_node_graph::{NodeTemplateIter, NodeId, NodeTemplateTrait, Graph, UserResponseTrait, NodeDataTrait, NodeResponse, OutputId};
@@ -142,6 +142,7 @@ impl ProtosNodeTemplate {
             ProtosNodeTemplate::Camera(handle) => { Box::new(handle.clone()) }
             ProtosNodeTemplate::Mesh(handle) => { Box::new(handle.clone()) }
             ProtosNodeTemplate::Shader(handle) => { Box::new(handle.clone()) }
+            #[allow(unreachable_patterns)] // To avoid missing impl of new nodes
             _ => { unimplemented!("Missing node implementation"); }
         }
     }
@@ -156,6 +157,7 @@ impl ProtosNodeTemplate {
             ProtosNodeTemplate::Camera(handle) => { f(handle) }
             ProtosNodeTemplate::Mesh(handle) => { f(handle) }
             ProtosNodeTemplate::Shader(handle) => { f(handle) }
+            #[allow(unreachable_patterns)] // To avoid missing impl of new nodes
             _ => { unimplemented!("Missing node implementation"); }
         }
     }

@@ -25,7 +25,6 @@ pub struct StaticVertex {
 
 impl Vertex for StaticVertex {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use std::mem;
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<StaticVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -87,7 +86,7 @@ impl ResourceDescTrait for MeshDescription {
 }
 
 impl ResourceDataTrait<MeshDescription> for MeshData {
-    fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &MeshDescription) -> anyhow::Result<Self> {
+    fn new(device: &wgpu::Device, _queue: &wgpu::Queue, desc: &MeshDescription) -> anyhow::Result<Self> {
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("indices"),
             size: desc.vertices.len() as wgpu::BufferAddress * mem::size_of::<StaticVertex>() as wgpu::BufferAddress,
@@ -105,7 +104,7 @@ impl ResourceDataTrait<MeshDescription> for MeshData {
             index_buffer,
         })
     }
-    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &MeshDescription) -> anyhow::Result<()> {
+    fn record_data(&self, _device: &wgpu::Device, _cmd: &mut wgpu::CommandEncoder, _desc: &MeshDescription) -> anyhow::Result<()> {
         Ok(()) // Nothing to do here
     }
 }

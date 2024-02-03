@@ -38,7 +38,7 @@ impl ProtosNode for BufferNode {
             ProtosDataType::Buffer
         );
     }
-    fn ui(&self, graph: &ProtosGraph, node_id: NodeId, ui: &mut egui::Ui) {
+    fn ui(&self, _graph: &ProtosGraph, _node_id: NodeId, _ui: &mut egui::Ui) {
         
     }
     fn evaluate(
@@ -62,11 +62,11 @@ impl ProtosNode for BufferNode {
     }
     fn record(
         &self,
-        device: &wgpu::Device,
-        cmd: &mut wgpu::CommandEncoder,
-        graph: &ProtosGraph,
-        node_id: NodeId,
-        outputs_cache: &mut OutputsCache
+        _device: &wgpu::Device,
+        _cmd: &mut wgpu::CommandEncoder,
+        _graph: &ProtosGraph,
+        _node_id: NodeId,
+        _outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
         Ok(()) // Nothing to record here
     }

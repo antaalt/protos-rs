@@ -8,7 +8,6 @@ pub struct ComputePassDescription {
 }
 pub struct ComputePassData {
     compute_pipeline: wgpu::ComputePipeline,
-    bind_group_layout : Vec<wgpu::BindGroupLayout>
 }
 
 pub type ComputePass = Resource<ComputePassDescription, ComputePassData>;
@@ -18,7 +17,7 @@ impl ResourceDescTrait for ComputePassDescription {
 }
 
 impl ResourceDataTrait<ComputePassDescription> for ComputePassData {
-    fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &ComputePassDescription) -> anyhow::Result<Self> {
+    fn new(device: &wgpu::Device, _queue: &wgpu::Queue, _desc: &ComputePassDescription) -> anyhow::Result<Self> {
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("module"), 
@@ -59,11 +58,14 @@ impl ResourceDataTrait<ComputePassDescription> for ComputePassData {
         } else {
             Ok(Self {
                 compute_pipeline,
-                bind_group_layout: vec![bind_group_layout],
             })
         }
     }
-    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &ComputePassDescription) -> anyhow::Result<()> {
+    fn record_data(&self, _device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, _desc: &ComputePassDescription) -> anyhow::Result<()> {
+        let mut compute_pass = cmd.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Compute pass"),
+        });
+        compute_pass.set_pipeline(&self.compute_pipeline);
         Ok(())
     }
 }

@@ -66,9 +66,6 @@ where
             Ok(())
         }
     }
-    pub fn has_data(&self) -> bool {
-        self.data.is_some()
-    }
     pub fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder) -> anyhow::Result<()> {
         if let Some(data) = &self.data {
             data.record_data(device, cmd, &self.desc)
@@ -76,12 +73,14 @@ where
             anyhow::bail!("No data")
         }
     }
+    #[allow(dead_code)] // TODO remove ?
     pub fn visit_desc(&self, f: impl FnOnce(&Desc)) {
         f(&self.desc)
     }
     pub fn visit_desc_mut(&mut self, f: impl FnOnce(&mut Desc)) {
         f(&mut self.desc)
     }
+    #[allow(dead_code)] // TODO remove ?
     pub fn visit_data(&self, f: impl FnOnce(&Data)) -> bool {
         if let Some(data) = &self.data {
             f(&data);

@@ -29,28 +29,28 @@ impl ProtosNode for ComputePassNode {
         // TODO for loop
         graph.add_output_param(node_id, "RT0".to_string(), ProtosDataType::Texture);
     }
-    fn ui(&self, graph: &ProtosGraph, node_id: NodeId, ui: &mut egui::Ui) {
+    fn ui(&self, _graph: &ProtosGraph, _node_id: NodeId, _ui: &mut egui::Ui) {
         
     }
     fn evaluate(
         &self, 
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        graph: &ProtosGraph,
-        node_id: NodeId,
-        available_size: Vec2,
-        outputs_cache: &mut OutputsCache
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+        _graph: &ProtosGraph,
+        _node_id: NodeId,
+        _available_size: Vec2,
+        _outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
         
         Ok(())
     }
     fn record(
         &self,
-        device: &wgpu::Device,
-        cmd: &mut wgpu::CommandEncoder,
-        graph: &ProtosGraph,
-        node_id: NodeId,
-        outputs_cache: &mut OutputsCache
+        _device: &wgpu::Device,
+        _cmd: &mut wgpu::CommandEncoder,
+        _graph: &ProtosGraph,
+        _node_id: NodeId,
+        _outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
         Ok(())
     }

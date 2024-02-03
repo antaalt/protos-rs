@@ -18,12 +18,12 @@ impl ResourceDescTrait for CameraDescription {
 }
 
 impl ResourceDataTrait<CameraDescription> for CameraData {
-    fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &CameraDescription) -> anyhow::Result<Self> {
+    fn new(_device: &wgpu::Device, _queue: &wgpu::Queue, _desc: &CameraDescription) -> anyhow::Result<Self> {
         Ok(Self {
             
         })
     }
-    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &CameraDescription) -> anyhow::Result<()> {
+    fn record_data(&self, _device: &wgpu::Device, _cmd: &mut wgpu::CommandEncoder, _desc: &CameraDescription) -> anyhow::Result<()> {
         Ok(())
     }
 }

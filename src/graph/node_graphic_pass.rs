@@ -52,7 +52,7 @@ impl ProtosNode for GraphicPassNode {
         // TODO: for loop with +/- button
         graph.add_output_param(node_id, "RT0".to_string(), ProtosDataType::Texture);
     }
-    fn ui(&self, graph: &ProtosGraph, node_id: NodeId, ui: &mut egui::Ui) {
+    fn ui(&self, _graph: &ProtosGraph, _node_id: NodeId, _ui: &mut egui::Ui) {
         
     }
     fn evaluate(

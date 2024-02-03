@@ -137,7 +137,8 @@ impl ResourceDataTrait<TextureDescription> for TextureData {
             }
         }
     }
-    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &TextureDescription) -> anyhow::Result<()> {
+    fn record_data(&self, _device: &wgpu::Device, _cmd: &mut wgpu::CommandEncoder, _desc: &TextureDescription) -> anyhow::Result<()> {
+        let _ = self.sampler;
         Ok(()) // Not recordable...
     }
 }
@@ -180,6 +181,7 @@ impl Texture {
             self.dirty = true;
         }
     }
+    #[allow(dead_code)] // TODO remove ?
     pub fn set_bytes(&mut self, bytes: Vec<u8>) {
         let src = TextureSource::Bytes(bytes);
         if self.desc.source != src {
@@ -222,6 +224,7 @@ impl TextureDescription {
             srgb,
         })
     }
+    #[allow(dead_code)] // TODO remove ?
     pub fn default_black_texture() -> Result<Self> {
         // TODO cache output.
         let rgba = vec![0, 0, 0, 255];
@@ -229,6 +232,7 @@ impl TextureDescription {
         Self::from_raw_memory(&rgba[..], dimensions, "DefaultBlackTexture".into(), true)
     }
     
+    #[allow(dead_code)] // TODO remove ?
     pub fn default_white_texture() -> Result<Self> {
         // TODO cache output.
         let rgba = vec![255, 255, 255, 255];
@@ -236,6 +240,7 @@ impl TextureDescription {
         Self::from_raw_memory(&rgba[..], dimensions, "DefaultBlackTexture".into(), true)
     }
 
+    #[allow(dead_code)] // TODO remove ?
     pub fn default_missing_texture() -> Result<Self> {
         // TODO cache output.
         let rgba = vec![255, 0, 255, 255];
@@ -243,6 +248,7 @@ impl TextureDescription {
         Self::from_raw_memory(&rgba[..], dimensions, "DefaultBlackTexture".into(), true)
     }
     
+    #[allow(dead_code)] // TODO remove ?
     pub fn default_normal_texture() -> Result<Self> {
         // TODO cache output.
         let rgba = vec![0, 127, 0, 255];

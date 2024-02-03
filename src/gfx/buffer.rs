@@ -19,12 +19,12 @@ impl ResourceDescTrait for BufferDescription {
 }
 
 impl ResourceDataTrait<BufferDescription> for BufferData {
-    fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &BufferDescription) -> anyhow::Result<Self> {
+    fn new(_device: &wgpu::Device, _queue: &wgpu::Queue, _desc: &BufferDescription) -> anyhow::Result<Self> {
         Ok(Self {
             
         })
     }
-    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &BufferDescription) -> anyhow::Result<()> {
+    fn record_data(&self, _device: &wgpu::Device, _cmd: &mut wgpu::CommandEncoder, _desc: &BufferDescription) -> anyhow::Result<()> {
         Ok(())
     }
 }

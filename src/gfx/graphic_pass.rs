@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::MutexGuard;
 
 use wgpu::RenderPassDescriptor;
 
@@ -9,7 +8,6 @@ use super::mesh::Vertex;
 use super::resource::Resource;
 use super::resource::ResourceDataTrait;
 use super::resource::ResourceDescTrait;
-use super::visit_resource;
 use super::Mesh;
 use super::ResourceHandle;
 use super::texture::*;

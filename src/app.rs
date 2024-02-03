@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use egui::{self, Vec2, TextStyle};
 use egui_node_graph::*;
 
-use crate::graph::*;
+use crate::{gfx, graph::*};
 
 
 #[derive(Default)]
@@ -117,37 +117,38 @@ impl ProtosApp {
 
                     match &node.user_data.template {
                         ProtosNodeTemplate::BackbufferPass(pass_node) => {
-                            let mut pass = pass_node.handle.lock().unwrap();
-                            // Resize render_target if required.
-                            let render_target_size = egui::Vec2::new(pass.get_width() as f32, pass.get_height() as f32);
-                            if self.runtime_state.available_size != render_target_size  {
-                                // resize, egui texture id
-                                pass.set_size(self.runtime_state.available_size.x as u32, self.runtime_state.available_size.y as u32);
-                            }
-                            let view_result = pass.get_view_handle();
-                            match view_result {
-                                Ok(view) => {
-                                    // Create resource if not created.
-                                    if self.runtime_state.egui_texture_id == egui::TextureId::default() {
-                                        self.runtime_state.egui_texture_id = egui_rpass.egui_texture_from_wgpu_texture(device, view, self.runtime_state.egui_image_filter);
-                                    }
-                                    // Should do this update only if backbuffer changed or dirty
-                                    //if self.runtime_state.dirty_egui_texture {
-                                        let update_result = egui_rpass.update_egui_texture_from_wgpu_texture(
-                                            device, 
-                                            view,
-                                            self.runtime_state.egui_image_filter, 
-                                            self.runtime_state.egui_texture_id
-                                        );
-                                        assert!(update_result.is_ok());
-                                    //}
-                                    ui.image(self.runtime_state.egui_texture_id, ui.available_size());
-                                },
-                                Err(e) => {
-                                    let message = format!("{}", e);
-                                    ui.add_sized(ui.available_size(), egui::Label::new(message));
+                            gfx::visit_resource_mut(&pass_node.handle, |pass| {
+                                // Resize render_target if required.
+                                let render_target_size = egui::Vec2::new(pass.get_width() as f32, pass.get_height() as f32);
+                                if self.runtime_state.available_size != render_target_size  {
+                                    // resize, egui texture id
+                                    pass.set_size(self.runtime_state.available_size.x as u32, self.runtime_state.available_size.y as u32);
                                 }
-                            }
+                                let view_result = pass.get_view_handle();
+                                match view_result {
+                                    Ok(view) => {
+                                        // Create resource if not created.
+                                        if self.runtime_state.egui_texture_id == egui::TextureId::default() {
+                                            self.runtime_state.egui_texture_id = egui_rpass.egui_texture_from_wgpu_texture(device, view, self.runtime_state.egui_image_filter);
+                                        }
+                                        // Should do this update only if backbuffer changed or dirty
+                                        //if self.runtime_state.dirty_egui_texture {
+                                            let update_result = egui_rpass.update_egui_texture_from_wgpu_texture(
+                                                device, 
+                                                view,
+                                                self.runtime_state.egui_image_filter, 
+                                                self.runtime_state.egui_texture_id
+                                            );
+                                            assert!(update_result.is_ok());
+                                        //}
+                                        ui.image(self.runtime_state.egui_texture_id, ui.available_size());
+                                    },
+                                    Err(e) => {
+                                        let message = format!("{}", e);
+                                        ui.add_sized(ui.available_size(), egui::Label::new(message));
+                                    }
+                                }
+                            });
                         }
                         _ => unreachable!("Backbuffer node is not a backbuffer pass...")
                     }

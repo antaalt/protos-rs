@@ -1,6 +1,6 @@
-use std::{any, sync::Arc};
+use std::sync::Arc;
 
-use super::{resource::{Resource, ResourceDataTrait, ResourceDescTrait,}, Texture, ResourceHandle};
+use super::{resource::{Resource, ResourceDataTrait, ResourceDescTrait,}, visit_resource, ResourceHandle, Texture};
 
 
 #[derive(Debug, Default)]
@@ -31,28 +31,29 @@ impl ResourceDataTrait<BackbufferPassDescription> for BackbufferPassData {
             target: Some(texture),
         })
     }
-    fn record_data(&self, device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &BackbufferPassDescription) -> anyhow::Result<()> {
+    fn record_data(&self, _device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &BackbufferPassDescription) -> anyhow::Result<()> {
         if let Some(origin_locked) = &desc.origin {
             if let Some(target) = &self.target {
-                let origin = origin_locked.lock().unwrap();
-                // Copy target to final storage.
-                let src = wgpu::ImageCopyTexture{ 
-                    texture: origin.get_handle().expect("Origin not loaded"),
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                };
-                let dst = wgpu::ImageCopyTexture{ 
-                    texture: target.get_handle().expect("Target not loaded"),
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                };
-                
-                cmd.copy_texture_to_texture(src, dst, wgpu::Extent3d {
-                    width: desc.width,
-                    height: desc.height,
-                    depth_or_array_layers:1,
+                visit_resource(origin_locked, |origin| {
+                    // Copy target to final storage.
+                    let src = wgpu::ImageCopyTexture{ 
+                        texture: origin.get_handle().expect("Origin not loaded"),
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    };
+                    let dst = wgpu::ImageCopyTexture{ 
+                        texture: target.get_handle().expect("Target not loaded"),
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    };
+                    
+                    cmd.copy_texture_to_texture(src, dst, wgpu::Extent3d {
+                        width: desc.width,
+                        height: desc.height,
+                        depth_or_array_layers:1,
+                    });
                 });
                 Ok(())
             } else {

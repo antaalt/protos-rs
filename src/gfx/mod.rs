@@ -15,7 +15,11 @@ use std::sync::Mutex;
 pub type ResourceHandle<Type> = Arc<Mutex<Type>>;
 
 // TODO: should be custom struct instead instead.
-pub fn visit_resource<Type>(data: ResourceHandle<Type>, f: impl FnOnce(&mut Type)) {
+pub fn visit_resource<Type>(data: &ResourceHandle<Type>, f: impl FnOnce(&Type)) {
+    let resource = &mut data.lock().expect("Could not lock resource");
+    f(resource)
+}
+pub fn visit_resource_mut<Type>(data: &ResourceHandle<Type>, f: impl FnOnce(&mut Type)) {
     let resource = &mut data.lock().expect("Could not lock resource");
     f(resource)
 }
