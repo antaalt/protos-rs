@@ -12,6 +12,7 @@ pub enum ProtosValueType {
     Unknown {},
     Texture { value: Option<ResourceHandle<gfx::Texture>> },
     Buffer { value: Option<ResourceHandle<gfx::Buffer>> },
+    Mesh { value: Option<ResourceHandle<gfx::Mesh>> },
     Scalar { value: f32 },
     Vec2 { value: [f32; 2] },
     Vec3 { value: [f32; 3] },
@@ -91,6 +92,10 @@ impl WidgetValueTrait for ProtosValueType {
                     //ui.label(param_name);
                     //ui.add(DragValue::new(v));
                 //});
+            }
+            ProtosValueType::Mesh { value } => {
+                let _ = value;
+                ui.label(param_name);
             }
             ProtosValueType::Scalar { value } => {
                 ui.horizontal(|ui| {

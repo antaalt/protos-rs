@@ -12,6 +12,7 @@ pub enum ProtosDataType {
     Unknown,
     Texture,
     Buffer,
+    Mesh,
     // constant node
     Scalar, // float
     Vec2,   // float2
@@ -24,6 +25,7 @@ impl DataTypeTrait<ProtosGraphState> for ProtosDataType {
         match self {
             ProtosDataType::Unknown => egui::Color32::from_rgb(255, 255, 255),
             ProtosDataType::Texture => egui::Color32::from_rgb(255, 0, 0),
+            ProtosDataType::Mesh => egui::Color32::from_rgb(0, 127, 0),
             ProtosDataType::Buffer => egui::Color32::from_rgb(0, 255, 0),
             ProtosDataType::Scalar => egui::Color32::from_rgb(0, 0, 255),
             ProtosDataType::Vec2 => egui::Color32::from_rgb(255, 255, 0),
@@ -37,6 +39,7 @@ impl DataTypeTrait<ProtosGraphState> for ProtosDataType {
             ProtosDataType::Unknown => Cow::Borrowed("unknown"),
             ProtosDataType::Texture => Cow::Borrowed("texture"),
             ProtosDataType::Buffer => Cow::Borrowed("buffer"),
+            ProtosDataType::Mesh => Cow::Borrowed("mesh"),
             ProtosDataType::Scalar => Cow::Borrowed("scalar"),
             ProtosDataType::Vec2 => Cow::Borrowed("vec2"),
             ProtosDataType::Vec3 => Cow::Borrowed("vec3"),

@@ -64,7 +64,7 @@ fn main() {
 
     let (device, queue) = pollster::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
-            features: wgpu::Features::default(),
+            features: wgpu::Features::VERTEX_WRITABLE_STORAGE | wgpu::Features::default(),
             limits: wgpu::Limits::default(),
             label: None,
         },

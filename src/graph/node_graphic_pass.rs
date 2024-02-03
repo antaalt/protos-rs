@@ -26,6 +26,14 @@ impl ProtosNode for GraphicPassNode {
             InputParamKind::ConnectionOnly,
             true,
         );
+        graph.add_input_param(
+            node_id,
+            "Geometry".to_string(),
+            ProtosDataType::Mesh,
+            ProtosValueType::Mesh { value: None },
+            InputParamKind::ConnectionOnly,
+            true,
+        );
         // TODO for loop
         graph.add_output_param(node_id, "RT0".to_string(), ProtosDataType::Texture);
     }
@@ -43,6 +51,19 @@ impl ProtosNode for GraphicPassNode {
         // For recording command list, we will need something similar just running for graphic pass & compute pass.
 
         let mut pass = self.handle.lock().unwrap();
+
+        
+        let geometry = self.evaluate_input(device, queue, graph, node_id, available_size, "Geometry", outputs_cache)?;
+        if let ProtosValueType::Mesh { value } = geometry {
+            if let Some(v) = value {
+                pass.set_geometry(v);
+            } else {
+                anyhow::bail!("Invalid geometry input")
+            }
+        } else {
+            anyhow::bail!("Invalid geometry input")
+        }
+
         // Input & co should be templated somewhere, trait to get these informations ?
         for i in 0..1 {
             //let name = format!("SRV{}", i)
@@ -51,7 +72,7 @@ impl ProtosNode for GraphicPassNode {
             if let ProtosValueType::Texture { value } = srv {
                 pass.set_shader_resource_view(i, value);
             } else {
-                anyhow::bail!("Invalid type is not a texture")
+                anyhow::bail!("Invalid srv input")
             }
         }
         let num_attachment = 1;

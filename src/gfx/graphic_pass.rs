@@ -1,77 +1,19 @@
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::MutexGuard;
 
 use wgpu::RenderPassDescriptor;
 
+use super::mesh::StaticVertex;
+use super::mesh::Vertex;
 use super::resource::Resource;
 use super::resource::ResourceDataTrait;
 use super::resource::ResourceDescTrait;
+use super::visit_resource;
+use super::Mesh;
 use super::ResourceHandle;
 use super::texture::*;
 
-pub enum VertexFactory {
-    Static, // Vertex layout for static mesh.
-}
-pub trait Vertex {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a>;
-    fn factory() -> VertexFactory;
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct StaticVertex {
-    pub position: [f32; 3],
-    pub tex_coords: [f32; 2],
-    pub normal: [f32; 3],
-    pub tangent: [f32; 3],
-    pub bitangent: [f32; 3],
-    pub color: [f32; 4],
-}
-
-impl Vertex for StaticVertex {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<StaticVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute { // pos
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute { // uv
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-                wgpu::VertexAttribute { // normal
-                    offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute { // tangent
-                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 3,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute { // bitangent
-                    offset: mem::size_of::<[f32; 11]>() as wgpu::BufferAddress,
-                    shader_location: 4,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute { // color
-                    offset: mem::size_of::<[f32; 14]>() as wgpu::BufferAddress,
-                    shader_location: 5,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-            ],
-        }
-    }
-    fn factory() -> VertexFactory {
-        VertexFactory::Static
-    }
-}
 fn default_bind_group_entry(index : u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding: index,
@@ -102,6 +44,7 @@ impl AttachmentDescription {
 #[derive(Default)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct GraphicPassDescription {
+    geometry: Option<ResourceHandle<Mesh>>,
     bind_group : Vec<Vec<wgpu::BindGroupLayoutEntry>>,
     render_target_desc: Vec<AttachmentDescription>,
     shader_resource_view: Vec<Option<ResourceHandle<Texture>>>,
@@ -109,8 +52,9 @@ pub struct GraphicPassDescription {
 }
 pub struct GraphicPassData {
     render_pipeline: wgpu::RenderPipeline,
-    bind_group_layout : Vec<wgpu::BindGroupLayout>,
-    render_target: Vec<ResourceHandle<Texture>>,
+    bind_group_layout : wgpu::BindGroupLayout, // TODO vec multiple bind group
+    bind_group : wgpu::BindGroup,
+    render_targets: Vec<ResourceHandle<Texture>>,
 }
 
 pub type GraphicPass = Resource<GraphicPassDescription, GraphicPassData>;
@@ -120,27 +64,55 @@ impl ResourceDescTrait for GraphicPassDescription {
 }
 
 impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
-    fn new(device: &wgpu::Device, queue: &wgpu::Queue, desc: &GraphicPassDescription) -> anyhow::Result<Self> {
+    fn new<'a>(device: &wgpu::Device, queue: &wgpu::Queue, desc: &GraphicPassDescription) -> anyhow::Result<Self> {
+        // TODO: handle multiple bind group
+        // TODO: handle other types that texture with an enum.
         // Create bind groups.
-        let mut bind_group_layout : Vec<wgpu::BindGroupLayout> = vec![];
-        for (i, bind_group) in desc.bind_group.iter().enumerate() {
-            bind_group_layout.push(device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: bind_group.as_ref(),
-                label: Some(format!("bind_group_layout{}", i).as_str()),
-            }));
+        let mut binding = 0;
+		let mut bind_group_layout_entry = Vec::new();
+		let mut bind_group_entry = Vec::new();
+        // Check inputs.
+		for resource in &desc.shader_resource_view {
+            if resource.is_none() {
+                anyhow::bail!("Resource binding not set")
+            }
         }
-        let mut bind_group_layout_ref : Vec<&wgpu::BindGroupLayout> = vec![];
-        for bind_group in &bind_group_layout {
-            bind_group_layout_ref.push(bind_group);
-        }
-
+        // Store locks to keep their lifetime for create_bind_group
+        let resources = desc.shader_resource_view.iter().map(|value| value.as_ref().unwrap()).collect::<Vec<_>>();
+        let resources_locked = resources.iter().map(|value| value.lock().unwrap()).collect::<Vec<_>>();
+		for resource_locked in &resources_locked {
+			bind_group_layout_entry.push(wgpu::BindGroupLayoutEntry {
+				binding: binding,
+				visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+				ty: wgpu::BindingType::Texture { 
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true }, 
+                    view_dimension: wgpu::TextureViewDimension::D2, 
+                    multisampled: false
+                },
+				count: None,
+			});            
+            bind_group_entry.push(wgpu::BindGroupEntry {
+                binding: binding,
+                resource: wgpu::BindingResource::TextureView(resource_locked.get_view_handle()?) 
+            });
+            binding += 1;
+		}
+		let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			label: Some("GraphicPassBindGroupLayout"),
+			entries: bind_group_layout_entry.as_slice(),
+		});
+		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+			label: Some("GraphicPassBindGroup"),
+			layout: &bind_group_layout,
+			entries: bind_group_entry.as_slice(),
+		});
 
         // Create attachments
         let mut render_targets = Vec::new();
         let mut render_targets_state = Vec::new();
         for render_target in &desc.render_target_desc {
             render_targets_state.push(Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba8Unorm,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
                 blend: Some(wgpu::BlendState::REPLACE),
                 write_mask: wgpu::ColorWrites::ALL
             }));
@@ -159,7 +131,7 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
         // Create pipeline
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: bind_group_layout_ref.as_ref(),
+            bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[], // TODO: push constant
         });
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -206,18 +178,20 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
         });
 
         Ok(GraphicPassData { 
-            render_pipeline: render_pipeline, 
-            render_target: render_targets,
-            bind_group_layout: bind_group_layout 
+            render_pipeline, 
+            render_targets,
+            bind_group,
+            bind_group_layout 
         })
     }
     fn record_data(&self, device : &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &GraphicPassDescription) -> anyhow::Result<()> {
 
-        let mut render_targets = Vec::new();
-        //for rt in &data.render_target {
-            let locked = self.render_target[0].lock().unwrap();
-            let value = locked.get_view_handle().unwrap();
-            render_targets.push(Some(wgpu::RenderPassColorAttachment {
+        // Store locks to keep their lifetime for create_bind_group
+        let mut color_attachments = Vec::new();
+        let resources_locked = self.render_targets.iter().map(|value| value.lock().unwrap()).collect::<Vec<_>>();
+        for resource_locked in &resources_locked {
+            let value = resource_locked.get_view_handle()?;
+            color_attachments.push(Some(wgpu::RenderPassColorAttachment {
                 view: value,
                 resolve_target: None,
                 ops: wgpu::Operations {
@@ -230,29 +204,34 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
                     store: true,
                 }
             }));
-        //}
-        
-        let render_pass = cmd.begin_render_pass(&RenderPassDescriptor{
-            label: Some("render_pass_random"),
-            color_attachments: &render_targets.as_ref(),
-            depth_stencil_attachment:None/*Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &self.depth_texture.view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: true,
-                }),
-                stencil_ops: None,
-            }),*/
-        });
-        //render_pass.
-        // This should depend on mesh informations mostly...
-        // Should have an input Geometry (or mesh...). for all graphic pass.
-        // Could be simple quad or more complex shape.
-        //render_pass.set_pipeline(&self.data.unwrap().render_pipeline);
-        // Bind group are coming from geometry... or srv view...
-        /*render_pass.set_bind_group(0, &self.data.unwrap().bind_group_layout);
-        render_pass.draw(vertices, instances);*/
-        Ok(())
+        }
+        if let Some(geometry) = &desc.geometry {
+            let geo = geometry.lock().unwrap();
+            if let Some(data) = &geo.data {
+                let mut render_pass = cmd.begin_render_pass(&RenderPassDescriptor{
+                    label: Some("render_pass_random"),
+                    color_attachments: &color_attachments.as_ref(),
+                    depth_stencil_attachment:None/*Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        stencil_ops: None,
+                    }),*/
+                });
+                render_pass.set_index_buffer(data.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.set_vertex_buffer(0, data.vertex_buffer.slice(..));
+                render_pass.set_pipeline(&self.render_pipeline);
+                render_pass.set_bind_group(0, &self.bind_group, &[]);
+                render_pass.draw_indexed(0..geo.desc.indices.len() as u32, 0, 0..1);
+                Ok(())
+            } else {
+                anyhow::bail!("No geometry data")
+            }
+        } else {
+            anyhow::bail!("No geometry")
+        }
     }
 }
 
@@ -294,11 +273,25 @@ impl GraphicPass {
             self.dirty = true;
         }
     }
+    pub fn set_geometry(&mut self, geometry: ResourceHandle<Mesh>) {
+        if self.desc.geometry.is_some() && Arc::ptr_eq(&self.desc.geometry.as_ref().unwrap(), &geometry)  {
+            self.dirty = true;
+        }
+        self.desc.geometry = Some(geometry);
+    }
     pub fn get_render_target(&self, index: u32) -> Option<ResourceHandle<Texture>> {
         if self.data.is_some() {
-            Some(self.data.as_ref().unwrap().render_target[index as usize].clone())
+            Some(self.data.as_ref().unwrap().render_targets[index as usize].clone())
         } else {
             None
         }
     }
 }
+
+/*impl GraphicPassData {
+    
+    fn get_view<'a>(&'a self, ) -> &'a wgpu::TextureView {
+        let guard = self.data.lock().unwrap();
+        guard.iter()
+    }
+}*/

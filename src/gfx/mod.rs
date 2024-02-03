@@ -13,14 +13,11 @@ use std::sync::Mutex;
 
 pub type ResourceHandle<Type> = Arc<Mutex<Type>>;
 
-/*struct ResourceHandle<Type : Resource> {
-    handle: Resource<
+// TODO: should be custom struct instead instead.
+fn visit_resource<Type>(data: ResourceHandle<Type>, f: impl FnOnce(&mut Type) -> anyhow::Result<()>) -> anyhow::Result<()> {
+    let resource = &mut data.lock().expect("Could not lock resource");
+    f(resource)
 }
-
-impl ResourceHandle<> {
-    visit();
-    visit_mut();
-}*/
 
 pub use self::backbuffer::BackbufferPass;
 pub use self::graphic_pass::GraphicPass;

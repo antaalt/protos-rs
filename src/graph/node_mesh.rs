@@ -1,7 +1,7 @@
 use egui::Vec2;
 use egui_node_graph::NodeId;
 
-use super::{core::ProtosGraph, node::{ProtosNode, OutputsCache}};
+use super::{core::ProtosGraph, node::{ProtosNode, OutputsCache}, ProtosDataType, ProtosValueType};
 
 use crate::gfx;
 
@@ -16,6 +16,8 @@ impl ProtosNode for MeshNode {
         "Mesh"
     }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
+        
+        graph.add_output_param(node_id, "Geometry".to_string(), ProtosDataType::Mesh);
     }
     fn evaluate(
         &self, 
@@ -26,6 +28,11 @@ impl ProtosNode for MeshNode {
         available_size: Vec2,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
+        
+        let mut mesh = self.mesh.lock().unwrap();
+        // TODO set path & shape ?
+        mesh.update_data(device, queue)?;
+        self.populate_output(graph, node_id, "Geometry", ProtosValueType::Mesh { value: Some(self.mesh.clone()) }, outputs_cache);
         Ok(())
     }
     fn record(
