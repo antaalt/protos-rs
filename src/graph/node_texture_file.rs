@@ -22,7 +22,7 @@ impl ProtosNode for TextureFileNode {
             node_id.clone(),
             String::from("Path"),
             ProtosDataType::String,
-            ProtosValueType::String { value: String::from("") },
+            ProtosValueType::String(String::from("")),
             InputParamKind::ConstantOnly,
             true,
         );
@@ -48,7 +48,7 @@ impl ProtosNode for TextureFileNode {
         let mut texture = self.handle.lock().unwrap();
         texture.set_path(PathBuf::from_str(path.as_str())?);
         texture.update_data(device, queue)?;
-        self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(self.handle.clone()) }, outputs_cache);
+        self.populate_output(graph, node_id, "texture", ProtosValueType::Texture(Some(self.handle.clone())), outputs_cache);
 
         Ok(())
     }

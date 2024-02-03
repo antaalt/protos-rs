@@ -20,7 +20,7 @@ impl ProtosNode for BufferNode {
             node_id,
             String::from("Size"),
             ProtosDataType::Scalar,
-            ProtosValueType::Scalar { value: 0.0 },
+            ProtosValueType::Scalar(0.0),
             InputParamKind::ConstantOnly,
             true,
         );
@@ -28,7 +28,7 @@ impl ProtosNode for BufferNode {
             node_id,
             String::from("Format"),
             ProtosDataType::Scalar,
-            ProtosValueType::Scalar { value: 0.0 },
+            ProtosValueType::Scalar(0.0),
             InputParamKind::ConstantOnly,
             true,
         );
@@ -56,7 +56,7 @@ impl ProtosNode for BufferNode {
         buffer.set_size(size as u32);
         buffer.set_format(format as u32);
         buffer.update_data(device, queue)?;
-        self.populate_output(graph, node_id, "buffer", ProtosValueType::Buffer { value: Some(self.handle.clone()) }, outputs_cache);
+        self.populate_output(graph, node_id, "buffer", ProtosValueType::Buffer(Some(self.handle.clone())), outputs_cache);
         
         Ok(())
     }

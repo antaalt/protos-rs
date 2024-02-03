@@ -20,7 +20,7 @@ impl ProtosNode for TextureResourceNode {
             node_id.clone(),
             String::from("Dimensions"),
             ProtosDataType::Vec2,
-            ProtosValueType::Vec2 { value: [100.0, 100.0] },
+            ProtosValueType::Vec2([100.0, 100.0]),
             InputParamKind::ConstantOnly,
             true,
         );
@@ -47,7 +47,7 @@ impl ProtosNode for TextureResourceNode {
         texture.set_width(dimensions[0] as u32);
         texture.set_height(dimensions[1] as u32);
         texture.update_data(device, queue)?;
-        self.populate_output(graph, node_id, "texture", ProtosValueType::Texture { value: Some(self.handle.clone()) }, outputs_cache);
+        self.populate_output(graph, node_id, "texture", ProtosValueType::Texture(Some(self.handle.clone())), outputs_cache);
         
         Ok(())
     }

@@ -39,8 +39,8 @@ impl ProtosNode for ShaderNode {
         // TODO set path & shape ?
         mesh.update_data(device, queue)?;
         // TODO workaround this, having a select for shader type ? Or two shader node...
-        self.populate_output(graph, node_id, "Fragment shader", ProtosValueType::Shader { value: Some(self.shader.clone()) }, outputs_cache);
-        self.populate_output(graph, node_id, "Vertex shader", ProtosValueType::Shader { value: Some(self.shader.clone()) }, outputs_cache);
+        self.populate_output(graph, node_id, "Fragment shader", ProtosValueType::Shader(Some(self.shader.clone())), outputs_cache);
+        self.populate_output(graph, node_id, "Vertex shader", ProtosValueType::Shader(Some(self.shader.clone())), outputs_cache);
         Ok(())
     }
     fn record(

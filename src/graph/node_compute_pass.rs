@@ -22,7 +22,7 @@ impl ProtosNode for ComputePassNode {
             node_id,
             "SRV0".to_string(),
             ProtosDataType::Texture,
-            ProtosValueType::Texture { value: None },
+            ProtosValueType::Texture(None),
             InputParamKind::ConnectionOnly,
             true,
         );

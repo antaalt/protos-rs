@@ -23,7 +23,7 @@ impl ProtosNode for BackbufferPassNode {
             node_id,
             "input".to_string(),
             ProtosDataType::Texture,
-            ProtosValueType::Texture { value: None },
+            ProtosValueType::Texture(None),
             InputParamKind::ConnectionOnly,
             true,
         );

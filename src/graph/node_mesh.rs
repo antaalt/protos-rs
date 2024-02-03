@@ -34,7 +34,7 @@ impl ProtosNode for MeshNode {
         let mut mesh = self.mesh.lock().unwrap();
         // TODO set path & shape ?
         mesh.update_data(device, queue)?;
-        self.populate_output(graph, node_id, "Geometry", ProtosValueType::Mesh { value: Some(self.mesh.clone()) }, outputs_cache);
+        self.populate_output(graph, node_id, "Geometry", ProtosValueType::Mesh(Some(self.mesh.clone())), outputs_cache);
         Ok(())
     }
     fn record(

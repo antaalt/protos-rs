@@ -21,7 +21,7 @@ impl ProtosNode for GraphicPassNode {
             node_id,
             "SRV0".to_string(),
             ProtosDataType::Texture,
-            ProtosValueType::Texture { value: None },
+            ProtosValueType::Texture(None),
             InputParamKind::ConnectionOnly,
             true,
         );
@@ -29,7 +29,7 @@ impl ProtosNode for GraphicPassNode {
             node_id,
             "Vertex shader".to_string(),
             ProtosDataType::Shader,
-            ProtosValueType::Shader { value: None },
+            ProtosValueType::Shader(None),
             InputParamKind::ConnectionOnly,
             true,
         );
@@ -37,7 +37,7 @@ impl ProtosNode for GraphicPassNode {
             node_id,
             "Fragment shader".to_string(),
             ProtosDataType::Shader,
-            ProtosValueType::Shader { value: None },
+            ProtosValueType::Shader(None),
             InputParamKind::ConnectionOnly,
             true,
         );
@@ -45,7 +45,7 @@ impl ProtosNode for GraphicPassNode {
             node_id,
             "Geometry".to_string(),
             ProtosDataType::Mesh,
-            ProtosValueType::Mesh { value: None },
+            ProtosValueType::Mesh(None),
             InputParamKind::ConnectionOnly,
             true,
         );
@@ -71,7 +71,7 @@ impl ProtosNode for GraphicPassNode {
         let mut pass = self.handle.lock().unwrap();
 
         let geometry = self.evaluate_input(device, queue, graph, node_id, available_size, "Geometry", outputs_cache)?;
-        if let ProtosValueType::Mesh { value } = geometry {
+        if let ProtosValueType::Mesh(value) = geometry {
             if let Some(v) = value {
                 pass.set_geometry(v);
             } else {
@@ -86,7 +86,7 @@ impl ProtosNode for GraphicPassNode {
             //let name = format!("SRV{}", i)
             let srv = self.evaluate_input(device, queue, graph, node_id, available_size, "SRV0", outputs_cache)?;
             // Check input is valid type.
-            if let ProtosValueType::Texture { value } = srv {
+            if let ProtosValueType::Texture(value) = srv {
                 pass.set_shader_resource_view(i, value);
             } else {
                 anyhow::bail!("Invalid srv input")
@@ -106,7 +106,7 @@ impl ProtosNode for GraphicPassNode {
         for i in 0..num_attachment {
             // Output graphic pass will populate output. need to ensure data is created already.
             // TODO: custom name per output. (MRT support)
-            self.populate_output(graph, node_id, "RT0", ProtosValueType::Texture { value: pass.get_render_target(i) }, outputs_cache);
+            self.populate_output(graph, node_id, "RT0", ProtosValueType::Texture(pass.get_render_target(i)), outputs_cache);
         }
         
         Ok(())
