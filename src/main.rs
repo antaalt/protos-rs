@@ -79,21 +79,37 @@ fn main() {
 
     let size = window.inner_size();
     let capabilities = surface.get_capabilities(&adapter);
-    let surface_format = capabilities.formats[0];
+    let surface_format = capabilities
+            .formats
+            .iter()
+            .copied()
+            .find(|f| f.is_srgb())
+            .unwrap_or(capabilities.formats[0]);
     let mut surface_config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format: surface_format,
-        width: size.width as u32,
-        height: size.height as u32,
-        present_mode: wgpu::PresentMode::Fifo,
-        alpha_mode: wgpu::CompositeAlphaMode::Auto,
+        width: size.width,
+        height: size.height,
+        present_mode: capabilities.present_modes[0],
+        alpha_mode: capabilities.alpha_modes[0],
         view_formats: vec![],
     };
     surface.configure(&device, &surface_config);
 
     let egui_context = egui::Context::default();
-    // We use the egui_winit_platform crate as the platform.
-    let mut state = State::new(egui_context.clone(), egui_context.viewport_id(), &window, None, None);
+    let egui_viewport_id = egui_context.viewport_id();
+    
+    const BORDER_RADIUS: f32 = 2.0;
+
+    let visuals = egui::Visuals {
+        window_rounding: egui::Rounding::same(BORDER_RADIUS),
+        window_shadow: egui::epaint::Shadow::NONE,
+        // menu_rounding: todo!(),
+        ..Default::default()
+    };
+    egui_context.set_visuals(visuals);
+
+    let mut state = State::new(egui_context.clone(), egui_viewport_id, &window, None, None);
 
     // We use the egui_wgpu_backend crate as the render backend.
     let mut egui_renderer = Renderer::new(&device, surface_format, None, 1);
@@ -107,13 +123,15 @@ fn main() {
     //let start_time = Instant::now();
     let _ = event_loop.run(move |event, elwt| {
         // Pass the winit events to the platform integration.
-        if let Event::WindowEvent { event, .. } = event {
+        if let Event::WindowEvent { event, window_id } = event {
             let _ = state.on_window_event(&window, &event);
-
+            if window_id != window.id() {
+                return;
+            }
+            // Should request redraw only when required
+            window.request_redraw();
             match event {
                 WindowEvent::RedrawRequested => {
-                    //platform.update_time(start_time.elapsed().as_secs_f64());
-
                     let output_frame = match surface.get_current_texture() {
                         Ok(frame) => frame,
                         Err(wgpu::SurfaceError::Outdated) => {
@@ -127,15 +145,11 @@ fn main() {
                             return;
                         }
                     };
-                    let output_view = output_frame
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default());
-
+                    let output_view = output_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
                     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label: Some("encoder"),
                     });
-
 
                     // End the UI frame. We could now handle the output and draw the UI with the backend.
                     let raw_input = state.take_egui_input(&window);
