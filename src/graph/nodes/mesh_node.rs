@@ -2,7 +2,7 @@ use core::fmt;
 use std::path::PathBuf;
 
 use egui::Vec2;
-use egui_node_graph::{InputParamKind, NodeId};
+use egui_node_graph::NodeId;
 
 use crate::{gfx::{self, MeshShape, MeshSource}, graph::{core::ProtosGraph, node::OutputsCache, ProtosDataType, ProtosNode, ProtosValueType}};
 
@@ -11,19 +11,8 @@ use crate::{gfx::{self, MeshShape, MeshSource}, graph::{core::ProtosGraph, node:
 pub struct MeshNode {
     mesh: gfx::ResourceHandle<gfx::Mesh>
 }
-
-pub enum MeshNodeInput {
-    Shape,
-}
 pub enum MeshNodeOutput {
     Geometry,
-}
-impl fmt::Display for MeshNodeInput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MeshNodeInput::Shape => write!(f, "Shape"),
-        }
-    }
 }
 
 impl fmt::Display for MeshNodeOutput {
@@ -39,14 +28,6 @@ impl ProtosNode for MeshNode {
         "Mesh"
     }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
-        graph.add_input_param(
-            node_id, 
-            MeshNodeInput::Shape.to_string(), 
-            ProtosDataType::String, 
-            ProtosValueType::String(Default::default()), 
-            InputParamKind::ConstantOnly,
-            true
-        );
         graph.add_output_param(node_id, MeshNodeOutput::Geometry.to_string(), ProtosDataType::Mesh);
     }
     fn ui(&self, _graph: &ProtosGraph, _node_id: NodeId, ui: &mut egui::Ui) {
@@ -76,12 +57,12 @@ impl ProtosNode for MeshNode {
                             });
                         match shape {
                             MeshShape::Sphere{ ring_count, segment_count, radius } => {
-                                changed |= ui.add(egui::Slider::new(ring_count, 0..=32)).changed();
-                                changed |= ui.add(egui::Slider::new(segment_count, 0..=32)).changed();
+                                changed |= ui.add(egui::Slider::new(ring_count, 4..=32)).changed();
+                                changed |= ui.add(egui::Slider::new(segment_count, 2..=32)).changed();
                                 changed |= ui.add(egui::Slider::new(radius, 0.0..=10.0)).changed();
                             },
                             MeshShape::Cube{ size } => {
-                                changed |= ui.add(egui::Slider::new(size, 0.0..=10.0)).changed();
+                                changed |= ui.add(egui::Slider::new(size, 0.1..=10.0)).changed();
                             },
                         }
                     }
