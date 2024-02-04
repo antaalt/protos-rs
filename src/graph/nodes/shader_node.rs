@@ -35,6 +35,9 @@ impl ProtosNode for ShaderNode {
     fn ui(&self, _graph: &ProtosGraph, _node_id: NodeId, ui: &mut egui::Ui) {
         gfx::visit_resource_mut(&self.shader, |shader| {
             shader.visit_desc_mut(|desc| {
+                let language = "wgsl";
+                let theme = egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx());
+                egui_extras::syntax_highlighting::code_view_ui(ui, &theme, desc.shader.as_str(), language);
                 ui.text_edit_multiline(&mut desc.shader).changed()
             });
         });

@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 
-use egui::{self, Vec2, TextStyle};
+use egui::{self, load::SizedTexture, TextStyle, Vec2};
 use egui_node_graph::*;
 
 use crate::{gfx, graph::*};
@@ -80,7 +80,7 @@ impl ProtosApp {
     
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
-    pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, queue : &wgpu::Queue, cmd : &mut wgpu::CommandEncoder, egui_rpass : &mut egui_wgpu_backend::RenderPass) {
+    pub fn ui(&mut self, ctx: &egui::Context, device : &wgpu::Device, queue : &wgpu::Queue, cmd : &mut wgpu::CommandEncoder, egui_renderer : &mut egui_wgpu::Renderer) {
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("Project", |ui| {
@@ -129,19 +129,21 @@ impl ProtosApp {
                                     Ok(view) => {
                                         // Create resource if not created.
                                         if self.runtime_state.egui_texture_id == egui::TextureId::default() {
-                                            self.runtime_state.egui_texture_id = egui_rpass.egui_texture_from_wgpu_texture(device, view, self.runtime_state.egui_image_filter);
+                                            self.runtime_state.egui_texture_id = egui_renderer.register_native_texture(device, view, self.runtime_state.egui_image_filter);
                                         }
                                         // Should do this update only if backbuffer changed or dirty
                                         //if self.runtime_state.dirty_egui_texture {
-                                            let update_result = egui_rpass.update_egui_texture_from_wgpu_texture(
+                                            egui_renderer.update_egui_texture_from_wgpu_texture(
                                                 device, 
                                                 view,
                                                 self.runtime_state.egui_image_filter, 
                                                 self.runtime_state.egui_texture_id
                                             );
-                                            assert!(update_result.is_ok());
                                         //}
-                                        ui.image(self.runtime_state.egui_texture_id, ui.available_size());
+                                        ui.image(egui::ImageSource::Texture(SizedTexture {
+                                            id: self.runtime_state.egui_texture_id,
+                                            size: ui.available_size(),
+                                        }));
                                     },
                                     Err(e) => {
                                         let message = format!("{}", e);
@@ -162,7 +164,7 @@ impl ProtosApp {
         let graph_response = egui::CentralPanel::default()
             .show(ctx, |ui| {
                 self.state
-                    .draw_graph_editor(ui, AllProtosNodeTemplates, &mut self.user_state)
+                    .draw_graph_editor(ui, AllProtosNodeTemplates, &mut self.user_state, vec![])
             })
             .inner;
 

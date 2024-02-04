@@ -8,26 +8,31 @@ edition = "2021"
 
 [dependencies]
 image = "0.24"
-egui_node_graph="0.4.0"
 anyhow = "1.0"
 serde = { version = "1.0", optional = true }
-egui_wgpu_backend = "0.19"
 chrono = "0.4"
 pollster = "0.2"
 bytemuck = { version = "1.4", features = [ "derive" ] }
-egui = "0.19"
-epi = "0.17"
-egui_winit_platform = "0.16"
-wgpu ="0.13"
-winit = { version="0.27.3", features = ["x11"]}
+wgpu ="0.18"
+egui = "0.25"
+egui-wgpu = "0.25"
+egui-winit = "0.25"
+egui_extras = {version="0.25", features = ["syntect"]}
+#epi = "0.17"
+#eframe = "0.25.0"
+egui_node_graph="0.4.0" # Max version supported of egui is 0.19.0
+winit = { version="0.29.4", features = ["x11"]}
 backtrace = "0.3.69"
-eframe = "0.25.0"
 serde_json = "1.0.111"
+syntect = "5.1.0"
 
+
+[patch.crates-io]
+egui_node_graph = { git = "https://github.com/antaalt/egui_node_graph.git", branch = "upgrade-egui" }
 
 [features]
 default = ["persistence"]
-persistence = ["serde", "egui_node_graph/persistence", "egui/persistence", "wgpu/trace", "wgpu/replay", "egui_winit_platform/clipboard"]
+persistence = ["serde", "egui_node_graph/persistence", "egui/persistence", "wgpu/trace", "wgpu/replay"]
 
 [profile.release]
 opt-level = 2 # fast and small wasm

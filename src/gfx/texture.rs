@@ -77,6 +77,7 @@ impl ResourceDataTrait<TextureDescription> for TextureData {
                 dimension: wgpu::TextureDimension::D2,
                 format: texture_format,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[texture_format]
             }
         );
 
@@ -124,8 +125,8 @@ impl ResourceDataTrait<TextureDescription> for TextureData {
                     },
                     wgpu::ImageDataLayout {
                         offset: 0,
-                        bytes_per_row: std::num::NonZeroU32::new(4 * desc_from_src.width),
-                        rows_per_image: std::num::NonZeroU32::new(desc_from_src.height),
+                        bytes_per_row: Some(4 * desc_from_src.width),
+                        rows_per_image: Some(desc_from_src.height),
                     },
                     size,
                 );
