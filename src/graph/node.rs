@@ -19,8 +19,8 @@ pub trait ProtosNode {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         graph: &ProtosGraph,
-        node_id: NodeId,
-        available_size: Vec2,
+        node_id: NodeId, // TODO: store in data & remove.
+        available_size: Vec2, // TODO: remove somehow
         outputs_cache: &mut OutputsCache) -> anyhow::Result<()>;
     // Record the node to command buffer
     fn record(&self,
@@ -37,10 +37,10 @@ pub trait ProtosNode {
         cmd: &mut wgpu::CommandEncoder,
         graph: &ProtosGraph,
         node_id: NodeId,
-        param_name: &str,
+        input_name: String,
         outputs_cache: &mut OutputsCache,
     ) -> anyhow::Result<()> {
-        let input_id = graph[node_id].get_input(param_name).unwrap();
+        let input_id = graph[node_id].get_input(input_name.to_string().as_str()).unwrap();
 
         // The output of another node is connected.
         if let Some(other_output_id) = graph.connection(input_id) {
@@ -65,11 +65,11 @@ pub trait ProtosNode {
         &self,
         graph: &ProtosGraph,
         node_id: NodeId,
-        param_name: &str,
+        param_name: String,
         value: ProtosValueType,
         outputs_cache: &mut OutputsCache,
     ) {
-        let output_id = graph[node_id].get_output(param_name).unwrap();
+        let output_id = graph[node_id].get_output(param_name.as_str()).unwrap();
         outputs_cache.insert(output_id, value.clone());
     }
 
@@ -81,10 +81,10 @@ pub trait ProtosNode {
         graph: &ProtosGraph,
         node_id: NodeId,
         available_size: Vec2,
-        param_name: &str,
+        param_name: String,
         outputs_cache: &mut OutputsCache,
     ) -> anyhow::Result<ProtosValueType> {
-        let input_id = graph[node_id].get_input(param_name)?;
+        let input_id = graph[node_id].get_input(param_name.as_str())?;
 
         // The output of another node is connected.
         if let Some(other_output_id) = graph.connection(input_id) {
@@ -114,11 +114,6 @@ pub trait ProtosNode {
         }
     }
 }
-
-
-// TODO:ProtosNode should be a node handle instead for simplification...
-// with a trait. but every node need a custom impl...
-//pub type NodeHandle<Type> = Arc<Mutex<Type>>;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]

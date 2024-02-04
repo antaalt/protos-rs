@@ -1,3 +1,5 @@
+use core::fmt;
+
 use egui::Vec2;
 use egui_node_graph::{InputParamKind, NodeId};
 
@@ -6,20 +8,46 @@ use crate::{gfx, graph::{core::ProtosGraph, node::OutputsCache, ProtosDataType, 
 #[derive(Default, Clone)]
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct GraphicPassNode {
-    handle: gfx::ResourceHandle<gfx::GraphicPass>
+    handle: gfx::ResourceHandle<gfx::GraphicPass>,
 }
 
+pub enum GraphicPassNodeInput {
+    ShaderResourceView(u32),
+    VertexShader,
+    FragmentShader,
+    Geometry,
+}
+pub enum GraphicPassNodeOutput {
+    RenderTarget(u32),
+}
+impl fmt::Display for GraphicPassNodeInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GraphicPassNodeInput::ShaderResourceView(index) => write!(f, "SRV{}", index),
+            GraphicPassNodeInput::VertexShader => write!(f, "VertexShader"),
+            GraphicPassNodeInput::FragmentShader => write!(f, "FragmentShader"),
+            GraphicPassNodeInput::Geometry => write!(f, "Geometry"),
+        }
+    }
+}
+impl fmt::Display for GraphicPassNodeOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GraphicPassNodeOutput::RenderTarget(index) => write!(f, "RT{}", index),
+        }
+    }
+}
 
 impl ProtosNode for GraphicPassNode {
     fn get_name(&self) -> &str {
         "Graphic pass"
     }
     fn build(&self, graph: &mut ProtosGraph, node_id: NodeId) {
-        // TODO: for loop with +/- button
+        // TODO: +/- button
         for i in 0..1 {
             graph.add_input_param(
                 node_id,
-                format!("SRV{}", i),
+                GraphicPassNodeInput::ShaderResourceView(i).to_string(),
                 ProtosDataType::Texture,
                 ProtosValueType::Texture(None),
                 InputParamKind::ConnectionOnly,
@@ -28,7 +56,7 @@ impl ProtosNode for GraphicPassNode {
         }
         graph.add_input_param(
             node_id,
-            "Vertex shader".to_string(),
+            GraphicPassNodeInput::VertexShader.to_string(),
             ProtosDataType::Shader,
             ProtosValueType::Shader(None),
             InputParamKind::ConnectionOnly,
@@ -36,7 +64,7 @@ impl ProtosNode for GraphicPassNode {
         );
         graph.add_input_param(
             node_id,
-            "Fragment shader".to_string(),
+            GraphicPassNodeInput::FragmentShader.to_string(),
             ProtosDataType::Shader,
             ProtosValueType::Shader(None),
             InputParamKind::ConnectionOnly,
@@ -44,15 +72,14 @@ impl ProtosNode for GraphicPassNode {
         );
         graph.add_input_param(
             node_id,
-            "Geometry".to_string(),
+            GraphicPassNodeInput::Geometry.to_string(),
             ProtosDataType::Mesh,
             ProtosValueType::Mesh(None),
             InputParamKind::ConnectionOnly,
             true,
         );
-        // TODO: for loop with +/- button
         for i in 0..1 {
-            graph.add_output_param(node_id, format!("RT{}", i), ProtosDataType::Texture);
+            graph.add_output_param(node_id, GraphicPassNodeOutput::RenderTarget(i).to_string(), ProtosDataType::Texture);
         }
     }
     fn ui(&self, _graph: &ProtosGraph, _node_id: NodeId, _ui: &mut egui::Ui) {
@@ -73,27 +100,16 @@ impl ProtosNode for GraphicPassNode {
 
         let mut pass = self.handle.lock().unwrap();
 
-        let geometry = self.evaluate_input(device, queue, graph, node_id, available_size, "Geometry", outputs_cache)?;
-        if let ProtosValueType::Mesh(value) = geometry {
-            if let Some(v) = value {
-                pass.set_geometry(v);
-            } else {
-                anyhow::bail!("Invalid geometry input")
-            }
+        let geometry = self.evaluate_input(device, queue, graph, node_id, available_size, GraphicPassNodeInput::Geometry.to_string(), outputs_cache)?.try_to_geometry()?;
+        if let Some(geo) = geometry {
+            pass.set_geometry(geo);
         } else {
             anyhow::bail!("Invalid geometry input")
         }
 
-        // Input & co should be templated somewhere, trait to get these informations ?
         for i in 0..1 {
-            //let name = format!("SRV{}", i)
-            let srv = self.evaluate_input(device, queue, graph, node_id, available_size, "SRV0", outputs_cache)?;
-            // Check input is valid type.
-            if let ProtosValueType::Texture(value) = srv {
-                pass.set_shader_resource_view(i, value);
-            } else {
-                anyhow::bail!("Invalid srv input")
-            }
+            let srv = self.evaluate_input(device, queue, graph, node_id, available_size, GraphicPassNodeInput::ShaderResourceView(i).to_string(), outputs_cache)?.try_to_texture()?;
+            pass.set_shader_resource_view(i, srv);
         }
         let num_attachment = 1;
         for i in 0..num_attachment {
@@ -108,8 +124,7 @@ impl ProtosNode for GraphicPassNode {
         
         for i in 0..num_attachment {
             // Output graphic pass will populate output. need to ensure data is created already.
-            // TODO: custom name per output. (MRT support)
-            self.populate_output(graph, node_id, "RT0", ProtosValueType::Texture(pass.get_render_target(i)), outputs_cache);
+            self.populate_output(graph, node_id, GraphicPassNodeOutput::RenderTarget(i).to_string(), ProtosValueType::Texture(pass.get_render_target(i)), outputs_cache);
         }
         
         Ok(())
@@ -122,8 +137,9 @@ impl ProtosNode for GraphicPassNode {
         node_id: NodeId,
         outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
-        // TODO: for loop
-        self.record_input(device, cmd, graph, node_id, "SRV0", outputs_cache)?;
+        for i in 0..1 {
+            self.record_input(device, cmd, graph, node_id, GraphicPassNodeInput::ShaderResourceView(i).to_string(), outputs_cache)?;
+        }
         let pass = self.handle.lock().unwrap();
         pass.record_data(device, cmd)
     }

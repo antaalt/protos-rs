@@ -77,8 +77,10 @@ where
     pub fn visit_desc(&self, f: impl FnOnce(&Desc)) {
         f(&self.desc)
     }
-    pub fn visit_desc_mut(&mut self, f: impl FnOnce(&mut Desc)) {
-        f(&mut self.desc)
+    pub fn visit_desc_mut(&mut self, f: impl FnOnce(&mut Desc) -> bool) {
+        if f(&mut self.desc) {
+            self.dirty = true;
+        }
     }
     #[allow(dead_code)] // TODO remove ?
     pub fn visit_data(&self, f: impl FnOnce(&Data)) -> bool {

@@ -41,3 +41,5 @@ pub use self::buffer::BufferDescription;
 pub use self::texture::TextureDescription;
 pub use self::camera::CameraDescription;
 pub use self::mesh::MeshDescription;
+pub use self::mesh::MeshSource;
+pub use self::mesh::MeshShape;

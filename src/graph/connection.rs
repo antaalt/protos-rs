@@ -83,6 +83,13 @@ impl ProtosValueType {
             anyhow::bail!("Invalid cast to texture")
         }
     }
+    pub fn try_to_geometry(self) -> anyhow::Result<Option<ResourceHandle<gfx::Mesh>>> {
+        if let ProtosValueType::Mesh(value) = self {
+            Ok(value)
+        } else {
+            anyhow::bail!("Invalid cast to mesh")
+        }
+    }
     pub fn try_to_scalar(self) -> anyhow::Result<f32> {
         if let ProtosValueType::Scalar(value) = self {
             Ok(value)
@@ -103,33 +110,6 @@ impl ProtosValueType {
         } else {
             anyhow::bail!("Invalid cast to scalar")
         }
-    }
-}
-
-pub fn get_data_type_from_value_type(value_type: ProtosValueType) -> ProtosDataType {
-    match value_type {
-        ProtosValueType::Unknown {  } => ProtosDataType::Unknown,
-        ProtosValueType::Texture(..) => ProtosDataType::Texture,
-        ProtosValueType::Buffer(..) => ProtosDataType::Buffer,
-        ProtosValueType::Mesh(..) => ProtosDataType::Mesh,
-        ProtosValueType::Shader(..) => ProtosDataType::Shader,
-        ProtosValueType::Scalar(..) => ProtosDataType::Scalar,
-        ProtosValueType::Vec2(..) => ProtosDataType::Vec2,
-        ProtosValueType::Vec3(..) => ProtosDataType::Vec3,
-        ProtosValueType::String(..) => ProtosDataType::String,
-    }
-}
-pub fn get_empty_value_type_from_data_type(data_type: ProtosDataType) -> ProtosValueType {
-    match data_type {
-        ProtosDataType::Unknown => ProtosValueType::Unknown {  },
-        ProtosDataType::Texture => ProtosValueType::Texture(None),
-        ProtosDataType::Buffer => ProtosValueType::Buffer(None),
-        ProtosDataType::Mesh => ProtosValueType::Mesh(None),
-        ProtosDataType::Shader => ProtosValueType::Shader(None),
-        ProtosDataType::Scalar => ProtosValueType::Scalar(0.0),
-        ProtosDataType::Vec2 => ProtosValueType::Vec2([0.0, 0.0]),
-        ProtosDataType::Vec3 => ProtosValueType::Vec3([0.0, 0.0, 0.0]),
-        ProtosDataType::String => ProtosValueType::String(String::from("")),
     }
 }
 
