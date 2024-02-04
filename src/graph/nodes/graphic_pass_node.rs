@@ -118,6 +118,22 @@ impl ProtosNode for GraphicPassNode {
             desc.set_size(available_size.x as u32, available_size.y as u32);
             pass.set_render_target(i, &desc);
         }
+        {
+            let vertex = self.evaluate_input(device, queue, graph, node_id, available_size, GraphicPassNodeInput::VertexShader.to_string(), outputs_cache)?.try_to_shader()?;
+            if let Some(vert) = vertex{
+                pass.set_vertex_shader(vert);
+            } else {
+                anyhow::bail!("Invalid vertex shader")
+            }
+        }
+        {
+            let fragment = self.evaluate_input(device, queue, graph, node_id, available_size, GraphicPassNodeInput::FragmentShader.to_string(), outputs_cache)?.try_to_shader()?;
+            if let Some(frag) = fragment{
+                pass.set_fragment_shader(frag);
+            } else {
+                anyhow::bail!("Invalid fragment shader")
+            }
+        }
         
         // Will call create if not created already.
         pass.update_data(device, queue)?;

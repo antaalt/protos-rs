@@ -90,6 +90,13 @@ impl ProtosValueType {
             anyhow::bail!("Invalid cast to mesh")
         }
     }
+    pub fn try_to_shader(self) -> anyhow::Result<Option<ResourceHandle<gfx::Shader>>> {
+        if let ProtosValueType::Shader(value) = self {
+            Ok(value)
+        } else {
+            anyhow::bail!("Invalid cast to scalar")
+        }
+    }
     pub fn try_to_scalar(self) -> anyhow::Result<f32> {
         if let ProtosValueType::Scalar(value) = self {
             Ok(value)

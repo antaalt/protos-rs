@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -11,6 +12,7 @@ use super::resource::ResourceDescTrait;
 use super::Mesh;
 use super::ResourceHandle;
 use super::texture::*;
+use super::Shader;
 
 fn default_bind_group_entry(index : u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
@@ -46,10 +48,11 @@ pub struct GraphicPassDescription {
     bind_group : Vec<Vec<wgpu::BindGroupLayoutEntry>>,
     render_target_desc: Vec<AttachmentDescription>,
     shader_resource_view: Vec<Option<ResourceHandle<Texture>>>,
-    //vertex_buffer_layout : Vec<wgpu::VertexBufferLayout>,
+    vertex_shader: Option<ResourceHandle<Shader>>,
+    fragment_shader: Option<ResourceHandle<Shader>>,
 }
 pub struct GraphicPassData {
-    render_pipeline: wgpu::RenderPipeline, // TODO vec multiple bind group
+    render_pipeline: wgpu::RenderPipeline,
     bind_group : wgpu::BindGroup,
     render_targets: Vec<ResourceHandle<Texture>>,
 }
@@ -118,13 +121,31 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
             attachment.update_data(device, queue).expect("Should not fail here");
             render_targets.push(Arc::new(Mutex::new(attachment)));
         }
-
+        if desc.vertex_shader.is_none() {
+            anyhow::bail!("No vertex shader")
+        }
+        if desc.fragment_shader.is_none() {
+            anyhow::bail!("No fragment shader")
+        }
         // Create shaders
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()), // TODO: dynamic shader.
-        });
-
+        let (vertex_shader, fragment_shader) = {
+            ({
+                let vertex_shader_source_locked = desc.vertex_shader.as_ref().unwrap();
+                let vertex_shader_source = vertex_shader_source_locked.lock().unwrap();
+                device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("VertexShader"),
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(vertex_shader_source.desc.shader.as_str())),
+                })
+            }, {
+                let fragment_shader_source_locked = desc.fragment_shader.as_ref().unwrap();
+                let fragment_shader_source = fragment_shader_source_locked.lock().unwrap();
+                device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("FragmentShader"),
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(fragment_shader_source.desc.shader.as_str())),
+                })
+            })
+        };
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
         // Create pipeline
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
@@ -135,7 +156,7 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: &vertex_shader,
                 entry_point: "vs_main",
                 buffers: &[
                     StaticVertex::desc(),
@@ -143,7 +164,7 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
                 ],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: &fragment_shader,
                 entry_point: "fs_main",
                 targets: render_targets_state.as_ref(),
             }),
@@ -174,11 +195,19 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
             multiview: None,
         });
 
-        Ok(GraphicPassData { 
-            render_pipeline, 
-            render_targets,
-            bind_group
-        })
+        let validation = pollster::block_on(device.pop_error_scope()).and_then(|err| {
+            Some(err)
+        });
+        if let Some(v) = validation {
+            anyhow::bail!(v.to_string())
+        } else {
+            Ok(Self { 
+                render_pipeline, 
+                render_targets,
+                bind_group
+            })
+        }
+        
     }
     fn record_data(&self, _device : &wgpu::Device, cmd: &mut wgpu::CommandEncoder, desc: &GraphicPassDescription) -> anyhow::Result<()> {
 
@@ -275,6 +304,18 @@ impl GraphicPass {
         }
         self.desc.geometry = Some(geometry);
     }
+    pub fn set_vertex_shader(&mut self, vertex_shader: ResourceHandle<Shader>) {
+        if self.desc.vertex_shader.is_some() && Arc::ptr_eq(&self.desc.vertex_shader.as_ref().unwrap(), &vertex_shader)  {
+            self.dirty = true;
+        }
+        self.desc.vertex_shader = Some(vertex_shader);
+    }
+    pub fn set_fragment_shader(&mut self, fragment_shader: ResourceHandle<Shader>) {
+        if self.desc.fragment_shader.is_some() && Arc::ptr_eq(&self.desc.fragment_shader.as_ref().unwrap(), &fragment_shader)  {
+            self.dirty = true;
+        }
+        self.desc.fragment_shader = Some(fragment_shader);
+    }
     pub fn get_render_target(&self, index: u32) -> Option<ResourceHandle<Texture>> {
         if self.data.is_some() {
             Some(self.data.as_ref().unwrap().render_targets[index as usize].clone())
@@ -283,11 +324,3 @@ impl GraphicPass {
         }
     }
 }
-
-/*impl GraphicPassData {
-    
-    fn get_view<'a>(&'a self, ) -> &'a wgpu::TextureView {
-        let guard = self.data.lock().unwrap();
-        guard.iter()
-    }
-}*/
