@@ -1,4 +1,4 @@
-use egui_node_graph::{Graph, GraphEditorState};
+use egui_node_graph::{CategoryTrait, Graph, GraphEditorState};
 
 use super::{ProtosNodeTemplate, ProtosDataType, ProtosValueType, ProtosGraphState};
 
@@ -9,4 +9,14 @@ pub type ProtosEditorState = GraphEditorState<ProtosNodeData, ProtosDataType, Pr
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProtosNodeData {
     pub(crate) template: ProtosNodeTemplate,
+}
+
+pub struct ProtosCategoryType {
+
+}
+
+impl CategoryTrait for ProtosCategoryType {
+    fn name(&self) -> String {
+        String::from("Hello there")
+    }
 }

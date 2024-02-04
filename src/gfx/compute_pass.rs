@@ -64,6 +64,7 @@ impl ResourceDataTrait<ComputePassDescription> for ComputePassData {
     fn record_data(&self, _device: &wgpu::Device, cmd: &mut wgpu::CommandEncoder, _desc: &ComputePassDescription) -> anyhow::Result<()> {
         let mut compute_pass = cmd.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Compute pass"),
+            timestamp_writes: None,
         });
         compute_pass.set_pipeline(&self.compute_pipeline);
         Ok(())

@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap};
 use egui::Vec2;
 use egui_node_graph::{NodeTemplateIter, NodeId, NodeTemplateTrait, Graph, UserResponseTrait, NodeDataTrait, NodeResponse, OutputId};
 
-use super::{core::ProtosGraph, nodes::{BackbufferPassNode, BufferNode, CameraNode, ComputePassNode, GraphicPassNode, MeshNode, ShaderNode, TextureFileNode, TextureResourceNode}, ProtosDataType, ProtosGraphState, ProtosNodeData, ProtosResponse, ProtosValueType};
+use super::{core::{ProtosCategoryType, ProtosGraph}, nodes::{BackbufferPassNode, BufferNode, CameraNode, ComputePassNode, GraphicPassNode, MeshNode, ShaderNode, TextureFileNode, TextureResourceNode}, ProtosDataType, ProtosGraphState, ProtosNodeData, ProtosResponse, ProtosValueType};
 
 pub type OutputsCache = HashMap<OutputId, ProtosValueType>;
 
@@ -152,6 +152,7 @@ impl NodeTemplateTrait for ProtosNodeTemplate {
     type DataType = ProtosDataType;
     type ValueType = ProtosValueType;
     type UserState = ProtosGraphState;
+    type CategoryType = ProtosCategoryType;
 
     fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
         match self.visit_node(|node| {

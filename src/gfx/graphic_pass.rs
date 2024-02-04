@@ -226,7 +226,7 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
                         b: 0.3,
                         a: 1.0,
                     }),
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 }
             }));
         }
@@ -236,7 +236,7 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
                 let mut render_pass = cmd.begin_render_pass(&RenderPassDescriptor{
                     label: Some("render_pass_random"),
                     color_attachments: &color_attachments.as_ref(),
-                    depth_stencil_attachment:None/*Some(wgpu::RenderPassDepthStencilAttachment {
+                    depth_stencil_attachment: None, /*Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &self.depth_texture.view,
                         depth_ops: Some(wgpu::Operations {
                             load: wgpu::LoadOp::Clear(1.0),
@@ -244,6 +244,8 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
                         }),
                         stencil_ops: None,
                     }),*/
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
                 });
                 render_pass.set_index_buffer(data.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 render_pass.set_vertex_buffer(0, data.vertex_buffer.slice(..));
