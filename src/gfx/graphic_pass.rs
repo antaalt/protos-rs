@@ -128,6 +128,7 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
             anyhow::bail!("No fragment shader")
         }
         // Create shaders
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
         let (vertex_shader, fragment_shader) = {
             ({
                 let vertex_shader_source_locked = desc.vertex_shader.as_ref().unwrap();
@@ -145,7 +146,6 @@ impl ResourceDataTrait<GraphicPassDescription> for GraphicPassData {
                 })
             })
         };
-        device.push_error_scope(wgpu::ErrorFilter::Validation);
         // Create pipeline
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),

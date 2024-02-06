@@ -7,7 +7,7 @@ pub struct ShaderDescription {
 }
 #[derive(Debug)]
 pub struct ShaderData {
-    shader: wgpu::ShaderModule,
+    //shader: wgpu::ShaderModule,
 }
 
 pub type Shader = Resource<ShaderDescription, ShaderData>;
@@ -17,17 +17,16 @@ impl ResourceDescTrait for ShaderDescription {
 }
 
 impl ResourceDataTrait<ShaderDescription> for ShaderData {
-    fn new(device: &wgpu::Device, _queue: &wgpu::Queue, desc: &ShaderDescription) -> anyhow::Result<Self> {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+    fn new(_device: &wgpu::Device, _queue: &wgpu::Queue, _desc: &ShaderDescription) -> anyhow::Result<Self> {
+        /*let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(desc.shader.as_str())),
-        });
+        });*/
         Ok(Self {
-            shader,
+            //shader, // This is unused...
         })
     }
     fn record_data(&self, _device: &wgpu::Device, _cmd: &mut wgpu::CommandEncoder, _desc: &ShaderDescription) -> anyhow::Result<()> {
-        let _ = self.shader;
         Ok(()) // Nothing to do here
     }
 }
