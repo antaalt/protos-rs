@@ -50,6 +50,7 @@ impl ProtosNode for ComputePassNode {
         _node_id: NodeId,
         _outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
+        let _ = self.handle;
         Ok(())
     }
 }

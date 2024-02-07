@@ -7,6 +7,7 @@ pub trait ResourceDataTrait<Desc : ResourceDescTrait> : Sized {
 }
 
 // Needed to avoid Default::default() being called on Data
+#[cfg(feature = "persistence")]
 fn default_data<Desc: ResourceDescTrait + Default, Data : ResourceDataTrait<Desc>>() -> Option<Data> {
     None
 }

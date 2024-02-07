@@ -37,6 +37,7 @@ impl ProtosNode for CameraNode {
         _node_id: NodeId,
         _outputs_cache: &mut OutputsCache
     ) -> anyhow::Result<()> {
+        let _ = self.handle;
         Ok(()) // Nothing to record here
     }
 }
