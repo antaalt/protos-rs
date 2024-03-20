@@ -21,6 +21,10 @@ use wasm_bindgen::{self, prelude::*};
 #[wasm_bindgen(start)]
 pub fn start() {
     use std::panic;
+    console_log::init_with_level(log::Level::Debug).expect("could not initialize logger");
     panic::set_hook(Box::new(console_error_panic_hook::hook));
-    app::run();
+    
+    wasm_bindgen_futures::spawn_local(async move {
+        app::run().await;
+    });
 }

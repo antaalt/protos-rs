@@ -12,3 +12,6 @@ Cargo.lock
 # File storing app state.
 state.json
 user_state.json
+
+# Compiled JS & WASM
+/web/public/scripts/

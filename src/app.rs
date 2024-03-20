@@ -8,7 +8,7 @@ const INITIAL_WIDTH: u32 = 1280;
 #[cfg(not(target_arch = "wasm32"))]
 const INITIAL_HEIGHT: u32 = 720;
 
-pub fn run() {
+pub async fn run() {
     use winit::keyboard::{Key, NamedKey};
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -41,9 +41,11 @@ pub fn run() {
     let window = builder
         .build(&event_loop)
         .unwrap();
+    
+    let backend = wgpu::util::backend_bits_from_env().unwrap_or_else(wgpu::Backends::all);
 
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::PRIMARY,
+        backends: backend,
         flags: wgpu::InstanceFlags::default(),
         dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
         gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
@@ -51,22 +53,21 @@ pub fn run() {
     let surface = unsafe { instance.create_surface(&window).expect("Failed to create surface") };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::HighPerformance,
-        compatible_surface: Some(&surface),
-        force_fallback_adapter: false,
-    }))
-    .unwrap();
+    // Can't use pollster with wasm, need function to be async
+    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, Some(&surface))
+    .await
+    .expect("No suitable GPU adapters found on the system!");
 
-    let (device, queue) = pollster::block_on(adapter.request_device(
+    let (device, queue) = adapter.request_device(
         &wgpu::DeviceDescriptor {
             features: wgpu::Features::VERTEX_WRITABLE_STORAGE | wgpu::Features::default(),
             limits: wgpu::Limits::default(),
             label: None,
         },
         None,
-    ))
-    .unwrap();
+    )
+    .await
+    .expect("Failed to request a device.");
 
     let size = window.inner_size();
     let capabilities = surface.get_capabilities(&adapter);
