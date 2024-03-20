@@ -11,6 +11,7 @@ const INITIAL_HEIGHT: u32 = 720;
 pub fn run() {
     use winit::keyboard::{Key, NamedKey};
 
+    #[cfg(not(target_arch = "wasm32"))]
     std::env::set_var("RUST_BACKTRACE", "1");
     /*std::panic::set_hook(Box::new(|_panic_info| {
         let backtrace = backtrace::Backtrace::new();

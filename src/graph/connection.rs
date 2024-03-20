@@ -11,6 +11,7 @@ use super::{ProtosResponse, ProtosGraphState, ProtosNodeData};
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProtosDataType {
     // gpu node
+    #[allow(dead_code)]
     Unknown,
     Texture,
     Buffer,
@@ -19,6 +20,7 @@ pub enum ProtosDataType {
     // constant node
     Scalar, // float
     Vec2,   // float2
+    #[allow(dead_code)]
     Vec3,   // float3
     String,
 }
@@ -33,6 +35,7 @@ pub enum ProtosValueType {
     Shader(Option<ResourceHandle<gfx::Shader>>),
     Scalar(f32),
     Vec2([f32; 2]),
+    #[allow(dead_code)]
     Vec3([f32; 3]),
     String(String),
 }

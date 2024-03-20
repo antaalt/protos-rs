@@ -17,12 +17,12 @@ wgpu ="0.18"
 egui = "0.25"
 egui-wgpu = "0.25"
 egui-winit = {version="0.25", default-features = false} # arboard dependency fail build on wasm... 
-egui_extras ="0.25"# features = ["syntect"]}
+egui_extras = { version="0.25", features = ["syntect"]}
 egui_node_graph="0.4.0" # Max version supported of egui is 0.19.0
 winit = { version="0.29.4", features = ["x11"]}
 backtrace = "0.3.69"
 serde_json = "1.0.111"
-#syntect = "5.1.0" # onig fail build with clang...
+syntect = {version= "5.1.0", default-features = false} # Might remove some dependencies
 
 [patch.crates-io]
 egui_node_graph = { git = "https://github.com/antaalt/egui_node_graph.git", branch = "upgrade-egui" }
@@ -31,11 +31,23 @@ egui_node_graph = { git = "https://github.com/antaalt/egui_node_graph.git", bran
 default = ["persistence"]
 persistence = ["serde", "egui_node_graph/persistence", "egui/persistence", "wgpu/trace", "wgpu/replay"]
 
+# How to build for wasm:
+# Set "rust-analyzer.cargo.target": "wasm32-unknown-unknown" in Rust analyzer settings for linting
+# In config.toml (Not this file), setup RUSTFLAGS for wgpu compilation
+# [build]
+# rustflags = ["--cfg=web_sys_unstable_apis"]
+# rustdocflags = ["--cfg=web_sys_unstable_apis"]
+# run 'wasm-pack build --target web -d web/public/scripts' to generate pkg folder
+# Then execute it with our basic node server.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2"
+wasm-bindgen = "0.2.92"
 web-sys = "0.3.5"
 console_log = "1.0.0"
 js-sys = "0.3.68"
+console_error_panic_hook = "0.1.7"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [profile.release]
 opt-level = 2 # fast and small wasm
