@@ -6,7 +6,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceRoot}/target/debug/protos-rs.exe",
-            "args": [],
+            "args": ["--features", "persistence"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
