@@ -1,4 +1,4 @@
-name: WASM deployment on GitHub pages
+name: Github pages
 
 on:
   push:
@@ -12,10 +12,14 @@ env:
 jobs:
   build:
 
+    # What's installed 
+    # https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2204-Readme.md
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v3
+    - name: Add target
+      run: rustup target add wasm32-unknown-unknown
     - name: Build WASM
       run: cargo build --lib --target wasm32-unknown-unknown --no-default-features --verbose
     - name: Run tests
