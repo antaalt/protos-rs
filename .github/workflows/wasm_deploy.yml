@@ -31,6 +31,11 @@ jobs:
       run: wasm-bindgen target/wasm32-unknown-unknown/debug/protos_rs.wasm --out-dir web/public/scripts --out-name protos_rs --no-modules --no-typescript
     #- name: Optimize WASM
     #  run: wasm-opt target/wasm32-unknown-unknown/debug/protos_rs.wasm -O2 --fast-math -o target/wasm32-unknown-unknown/debug/protos_rs.wasm
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: static-website
+        path: web/public/
 
   deploy:
     # Add a dependency to the build job
@@ -49,11 +54,6 @@ jobs:
     # Specify runner + deployment step
     runs-on: ubuntu-latest
     steps:
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: static-website
-          path: web/public/
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4 # or specific "vX.X.X" version tag for this action
