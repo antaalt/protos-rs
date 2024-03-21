@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: --cfg=web_sys_unstable_apis # This flag is required because wgpu is still unstable on wasm.
 
 jobs:
   build:
