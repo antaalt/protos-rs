@@ -34,8 +34,8 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: static-website
-        path: web/public/
+        name: github-pages
+        path: ./web/public/
 
   deploy:
     # Add a dependency to the build job
