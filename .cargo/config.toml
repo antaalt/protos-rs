@@ -1,0 +1,3 @@
+[target.wasm32-unknown-unknown]
+runner = 'wasm-bindgen-test-runner' # This is required so that wasm test are executed in a browser.
+rustflags = ["--cfg=web_sys_unstable_apis"] # This flag is required because wgpu is still unstable on wasm.
