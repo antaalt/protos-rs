@@ -1,0 +1,52 @@
+name: WASM deployment on GitHub pages
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build WASM
+      run: cargo build --lib --target wasm32-unknown-unknown --no-default-features --verbose
+    - name: Run tests
+      run: cargo test --lib --target wasm32-unknown-unknown --no-default-features --verbose
+    - name: Generate JS
+      run: wasm-bindgen target/wasm32-unknown-unknown/debug/protos_rs.wasm --out-dir web/public/scripts --out-name protos_rs --no-modules --no-typescript
+    #- name: Optimize WASM
+    #  run: wasm-opt target/wasm32-unknown-unknown/debug/protos_rs.wasm -O2 --fast-math -o target/wasm32-unknown-unknown/debug/protos_rs.wasm
+
+  deploy:
+    # Add a dependency to the build job
+    needs: build
+
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
+  
+    # Deploy to the github-pages environment
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+  
+    # Specify runner + deployment step
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-website
+          path: web/public/
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4 # or specific "vX.X.X" version tag for this action
