@@ -244,8 +244,7 @@ impl ResourceDataTrait<MeshDescription> for MeshData {
                 }
             },
             MeshSource::Path(_) => {
-                // TODO: mesh obj & co
-                unimplemented!("TODO:");
+                anyhow::bail!("Path in mesh not yet supported.")
             } 
             _ => { anyhow::bail!("Invalid mesh source") }
         };
