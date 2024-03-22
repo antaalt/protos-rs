@@ -19,12 +19,12 @@ use wasm_bindgen::{self, prelude::*};
 /// You can add more callbacks like this if you want to call in to your code.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
-pub fn start() {
+pub async fn start() -> Result<(), JsValue> {
     use std::panic;
     console_log::init_with_level(log::Level::Debug).expect("could not initialize logger");
     panic::set_hook(Box::new(console_error_panic_hook::hook));
     
-    wasm_bindgen_futures::spawn_local(async move {
-        app::run().await;
-    });
+    app::run().await;
+
+    Ok(())
 }
