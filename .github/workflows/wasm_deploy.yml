@@ -22,15 +22,17 @@ jobs:
     - name: Add target
       run: rustup target add wasm32-unknown-unknown
     - name: Build WASM
-      run: cargo build --lib --target wasm32-unknown-unknown --no-default-features --verbose
+      run: cargo build --release --lib --target wasm32-unknown-unknown --no-default-features --verbose
     - name: Install wasm-bindgen
       run: cargo install wasm-bindgen-cli
     - name: Run tests
       run: cargo test --lib --target wasm32-unknown-unknown --no-default-features --verbose
     - name: Generate JS
-      run: wasm-bindgen target/wasm32-unknown-unknown/debug/protos_rs.wasm --out-dir web/public/scripts --out-name protos_rs --no-modules --no-typescript
-    #- name: Optimize WASM
-    #  run: wasm-opt target/wasm32-unknown-unknown/debug/protos_rs.wasm -O2 --fast-math -o target/wasm32-unknown-unknown/debug/protos_rs.wasm
+      run: wasm-bindgen target/wasm32-unknown-unknown/release/protos_rs.wasm --out-dir web/public/scripts --out-name protos_rs --no-modules --no-typescript
+    - name: Install wasm-opt
+      run: cargo install wasm-opt
+    - name: Optimize WASM
+      run: wasm-opt target/wasm32-unknown-unknown/release/protos_rs.wasm -O2 --fast-math -o target/wasm32-unknown-unknown/release/protos_rs.wasm
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
