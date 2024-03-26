@@ -114,9 +114,7 @@ impl ProtosNode for GraphicPassNode {
         let num_attachment = 1;
         for i in 0..num_attachment {
             // Should gather these informations from a evaluate_output. -> reach output node, read its data & select informations.
-            let mut desc = gfx::AttachmentDescription::default();
-            desc.set_size(available_size.x as u32, available_size.y as u32);
-            pass.set_render_target(i, &desc);
+            pass.set_render_target(i, available_size.x as u32, available_size.y as u32);
         }
         {
             let vertex = self.evaluate_input(device, queue, graph, node_id, available_size, GraphicPassNodeInput::VertexShader.to_string(), outputs_cache)?.try_to_shader()?;

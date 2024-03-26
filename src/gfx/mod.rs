@@ -33,13 +33,5 @@ pub use self::camera::Camera;
 pub use self::mesh::Mesh;
 pub use self::shader::Shader;
 
-pub use self::backbuffer::BackbufferPassDescription;
-pub use self::graphic_pass::GraphicPassDescription;
-pub use self::graphic_pass::AttachmentDescription;
-pub use self::compute_pass::ComputePassDescription;
-pub use self::buffer::BufferDescription;
-pub use self::texture::TextureDescription;
-pub use self::camera::CameraDescription;
-pub use self::mesh::MeshDescription;
 pub use self::mesh::MeshSource;
 pub use self::mesh::MeshShape;

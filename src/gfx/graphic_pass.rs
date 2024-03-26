@@ -290,12 +290,14 @@ impl GraphicPass {
         }
         self.desc.shader_resource_view[index as usize] = srv;
     }
-    pub fn set_render_target(&mut self, index: u32, rt : &AttachmentDescription) {
+    pub fn set_render_target(&mut self, index: u32, width : u32, height: u32) {
+        let mut rt = AttachmentDescription::default();
+        rt.set_size(width, height);
         if index as usize >= self.desc.render_target_desc.len() {
             self.desc.render_target_desc.resize(index as usize + 1, AttachmentDescription::default());
             self.dirty = true;
         }
-        if self.desc.render_target_desc[index as usize] != *rt {
+        if self.desc.render_target_desc[index as usize] != rt {
             self.desc.render_target_desc[index as usize] = rt.clone();
             self.dirty = true;
         }
