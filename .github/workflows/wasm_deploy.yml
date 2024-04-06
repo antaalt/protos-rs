@@ -28,7 +28,7 @@ jobs:
     - name: Run tests
       run: cargo test --lib --target wasm32-unknown-unknown --no-default-features --verbose
     - name: Generate JS
-      run: wasm-bindgen target/wasm32-unknown-unknown/release/protos_rs.wasm --out-dir web/public/scripts --out-name protos_rs --no-modules --no-typescript
+      run: wasm-bindgen target/wasm32-unknown-unknown/release/protos_rs.wasm --out-dir web/public/scripts --out-name protos_rs --target no-modules --no-typescript
     - name: Install wasm-opt
       run: cargo install wasm-opt
     - name: Optimize WASM
